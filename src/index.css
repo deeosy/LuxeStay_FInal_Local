@@ -1,0 +1,252 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* LuxeStay Design System - Luxury Hotel Booking Platform */
+
+@layer base {
+  :root {
+    /* Background & Foreground */
+    --background: 40 33% 98%;
+    --foreground: 25 20% 15%;
+
+    /* Card surfaces */
+    --card: 0 0% 100%;
+    --card-foreground: 25 20% 15%;
+
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 25 20% 15%;
+
+    /* Primary - Deep Espresso Brown */
+    --primary: 25 30% 18%;
+    --primary-foreground: 40 33% 98%;
+
+    /* Secondary - Warm Cream */
+    --secondary: 40 40% 94%;
+    --secondary-foreground: 25 20% 15%;
+
+    /* Muted - Light Warm Gray */
+    --muted: 30 15% 92%;
+    --muted-foreground: 25 10% 45%;
+
+    /* Accent - Champagne Gold */
+    --accent: 38 65% 50%;
+    --accent-foreground: 25 20% 15%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders & Inputs */
+    --border: 30 20% 88%;
+    --input: 30 20% 88%;
+    --ring: 38 65% 50%;
+
+    --radius: 0.5rem;
+
+    /* Custom luxury colors */
+    --champagne: 38 65% 50%;
+    --champagne-light: 38 60% 70%;
+    --champagne-dark: 38 70% 40%;
+    --ivory: 40 40% 96%;
+    --espresso: 25 30% 18%;
+    --espresso-light: 25 25% 30%;
+    --warm-gray: 30 10% 60%;
+    --blush: 15 30% 95%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(25 30% 18% / 0.85) 0%, hsl(25 30% 18% / 0.6) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(38 65% 50%) 0%, hsl(38 60% 60%) 100%);
+    --gradient-warm: linear-gradient(180deg, hsl(40 33% 98%) 0%, hsl(40 40% 94%) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 2px 8px hsl(25 20% 15% / 0.05);
+    --shadow-md: 0 4px 20px hsl(25 20% 15% / 0.08);
+    --shadow-lg: 0 8px 40px hsl(25 20% 15% / 0.12);
+    --shadow-gold: 0 4px 20px hsl(38 65% 50% / 0.25);
+
+    /* Sidebar */
+    --sidebar-background: 40 33% 98%;
+    --sidebar-foreground: 25 20% 15%;
+    --sidebar-primary: 25 30% 18%;
+    --sidebar-primary-foreground: 40 33% 98%;
+    --sidebar-accent: 40 40% 94%;
+    --sidebar-accent-foreground: 25 20% 15%;
+    --sidebar-border: 30 20% 88%;
+    --sidebar-ring: 38 65% 50%;
+  }
+
+  .dark {
+    --background: 25 20% 8%;
+    --foreground: 40 33% 95%;
+
+    --card: 25 20% 12%;
+    --card-foreground: 40 33% 95%;
+
+    --popover: 25 20% 12%;
+    --popover-foreground: 40 33% 95%;
+
+    --primary: 38 65% 50%;
+    --primary-foreground: 25 20% 8%;
+
+    --secondary: 25 20% 18%;
+    --secondary-foreground: 40 33% 95%;
+
+    --muted: 25 15% 20%;
+    --muted-foreground: 30 10% 60%;
+
+    --accent: 38 65% 50%;
+    --accent-foreground: 25 20% 8%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 25 15% 22%;
+    --input: 25 15% 22%;
+    --ring: 38 65% 50%;
+
+    --sidebar-background: 25 20% 10%;
+    --sidebar-foreground: 40 33% 95%;
+    --sidebar-primary: 38 65% 50%;
+    --sidebar-primary-foreground: 25 20% 8%;
+    --sidebar-accent: 25 20% 18%;
+    --sidebar-accent-foreground: 40 33% 95%;
+    --sidebar-border: 25 15% 22%;
+    --sidebar-ring: 38 65% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+@layer components {
+  .container-luxury {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground px-8 py-3 font-medium tracking-wide transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .btn-accent {
+    @apply bg-accent text-accent-foreground px-8 py-3 font-medium tracking-wide transition-all duration-300 hover:shadow-gold hover:-translate-y-0.5;
+  }
+
+  .btn-outline {
+    @apply border border-primary text-primary px-8 py-3 font-medium tracking-wide transition-all duration-300 hover:bg-primary hover:text-primary-foreground;
+  }
+
+  .card-luxury {
+    @apply bg-card rounded-lg overflow-hidden transition-all duration-500 hover:shadow-lg hover:-translate-y-1;
+  }
+
+  .section-title {
+    @apply text-sm uppercase tracking-[0.2em] text-muted-foreground mb-3;
+  }
+
+  .heading-display {
+    @apply font-display text-4xl md:text-5xl lg:text-6xl font-medium leading-tight;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .price-tag {
+    @apply bg-primary text-primary-foreground px-3 py-1 text-sm font-medium;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.6s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.6s ease-out forwards;
+  }
+
+  .animate-slide-in-left {
+    animation: slideInLeft 0.6s ease-out forwards;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.5s ease-out forwards;
+  }
+
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

@@ -1,0 +1,4 @@
+project_id = "njjtqsczcytnuqklujeq"
+
+[functions.liteapi]
+verify_jwt = false
