@@ -1,5 +1,6 @@
-import { useParams, useNavigate, Link, createSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, createSearchParams, useSearchParams } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
+import { Helmet } from 'react-helmet-async';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HotelCard from '@/components/HotelCard';
@@ -7,6 +8,7 @@ import { allHotels } from '@/data/hotels';
 import { useLiteApiHotelDetail, useLiteApiSearch } from '@/hooks/useLiteApiHotels';
 import { cities } from '@/data/cities';
 import useBookingStore from '@/stores/useBookingStore';
+import { trackAffiliateRedirect, trackBookingClick, trackHotelView } from '@/utils/analytics';
 import {
   Star,
   MapPin,
@@ -42,36 +44,27 @@ const facilityIcons = {
   Concierge: Users,
 };
 
-// Helper to create SEO-friendly slug from hotel name
-const createSlug = (name) => {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-};
 
 // Find hotel by ID or slug in static data
-const findStaticHotel = (idOrSlug) => {
-  // Try numeric ID first
-  const numericId = parseInt(idOrSlug);
-  if (!isNaN(numericId)) {
-    const hotelById = allHotels.find((h) => h.id === numericId);
-    if (hotelById) return hotelById;
-  }
-  
-  // Fallback to slug match
-  return allHotels.find((h) => createSlug(h.name) === idOrSlug);
+const findStaticHotel = (id) => {
+  const numericId = Number(id);
+  if (!numericId) return null;
+  return allHotels.find((h) => h.id === numericId) || null;
 };
+
 
 const HotelDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isDebug = searchParams.get('debug') === 'true';
   
-  // Read booking-critical data from global store
+  // Read booking state from global store
   const { 
     checkIn, 
     checkOut, 
     guests,
+    rooms,
     setCheckIn,
     setCheckOut,
     setGuests,
@@ -92,6 +85,7 @@ const HotelDetail = () => {
     checkIn,
     checkOut,
     guests,
+    rooms,
     enabled: isLiteApiHotel,
   });
 
@@ -102,11 +96,18 @@ const HotelDetail = () => {
   useEffect(() => {
     if (hotel) {
       setSelectedHotel(hotel);
+      trackHotelView({
+        hotel_id: hotel.liteApiId || hotel.id,
+        name: hotel.name,
+        city: hotel.city || hotel.location,
+        price: hotel.price
+      });
     }
   }, [hotel, setSelectedHotel]);
 
   // Determine city for similar hotels
-  const cityForSearch = hotel ? (hotel.city || (hotel.location && hotel.location.split(',')[0])) : '';
+  const cityForSearch = hotel?.city || hotel?.citySlug || (hotel?.location ? hotel.location.split(',')[0] : '');
+
   const knownCity = cities.find(c => cityForSearch && c.cityName.toLowerCase() === cityForSearch.toLowerCase());
   const searchDestination = knownCity ? knownCity.query : cityForSearch;
 
@@ -166,17 +167,52 @@ const similarHotels = useMemo(() => {
   }
 
   const handleBookNow = () => {
+    if (isDebug) {
+      console.group('🐞 DEBUG: HotelDetail Redirect');
+      console.log('Hotel ID:', hotel.liteApiId || hotel.id);
+      console.log('City:', hotel.city || hotel.location);
+      console.log('Price:', hotel.price);
+      console.log('Check-in:', checkIn);
+      console.log('Check-out:', checkOut);
+      console.log('Guests:', guests);
+      console.log('Rooms:', rooms);
+      console.log('Direct Booking URL:', hotel.bookingUrl);
+      
+      if (hotel.bookingUrl) {
+         try {
+           const urlObj = new URL(hotel.bookingUrl);
+           const params = urlObj.searchParams;
+           console.log('--- URL Params ---');
+           console.log('Full Params:', Object.fromEntries(params.entries()));
+         } catch(e) { console.error(e); }
+      }
+      console.groupEnd();
+      
+      if (hotel.bookingUrl) {
+          if (!window.confirm('DEBUG MODE: Redirecting to affiliate (HotelDetail). Proceed?')) {
+            return;
+          }
+      }
+    }
+
     // Track booking click
-    console.log('booking_click', {
-      hotelId: hotel.liteApiId || hotel.id,
-      city: hotel.location,
+    trackBookingClick({
+      hotel_id: hotel.liteApiId || hotel.id,
+      city: hotel.city || hotel.location,
       price: hotel.price,
-      dates: { checkIn, checkOut },
+      check_in: checkIn,
+      check_out: checkOut,
+      guests,
+      rooms,
       source: 'liteapi'
     });
 
     // Use LiteAPI deep link if available
     if (hotel.bookingUrl) {
+      trackAffiliateRedirect({
+        hotel_id: hotel.liteApiId || hotel.id,
+        city: hotel.city || hotel.location,
+      });
       window.location.href = hotel.bookingUrl;
       return;
     }
@@ -216,8 +252,80 @@ const similarHotels = useMemo(() => {
     .filter(c => c.citySlug !== citySlug)
     .slice(0, 3);
 
+  const pageTitle = `${hotel.name} - Book Now | LuxeStay`;
+  const pageDescription = hotel.description 
+    ? hotel.description.substring(0, 160) 
+    : `Book your stay at ${hotel.name} in ${hotel.city || hotel.location}. Best rates guaranteed.`;
+  const pageUrl = `https://luxestayhaven.com/hotel/${hotel.liteApiId || hotel.id}`;
+  const hotelImage = hotel.image;
+
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+         <title>{pageTitle}</title>
+         <meta name="description" content={pageDescription} />
+         <link rel="canonical" href={pageUrl} />
+         
+         <meta property="og:title" content={pageTitle} />
+         <meta property="og:description" content={pageDescription} />
+         <meta property="og:url" content={pageUrl} />
+         <meta property="og:image" content={hotelImage} />
+         <meta property="og:type" content="website" />
+
+         {/* JSON-LD for Hotel */}
+         <script type="application/ld+json">
+           {JSON.stringify({
+             "@context": "https://schema.org",
+             "@type": "Hotel",
+             "name": hotel.name,
+             "description": hotel.description,
+             "image": hotelImage,
+             "address": {
+               "@type": "PostalAddress",
+               "addressLocality": hotel.city || hotel.location,
+               "addressCountry": hotel.country || ""
+             },
+             "priceRange": `$${hotel.price}`,
+             "aggregateRating": {
+               "@type": "AggregateRating",
+               "ratingValue": hotel.rating,
+               "reviewCount": hotel.reviews || 0
+             },
+             "offers": {
+               "@type": "Offer",
+               "priceCurrency": "USD",
+               "price": hotel.price,
+               "availability": "https://schema.org/InStock"
+             }
+           })}
+         </script>
+         <script type="application/ld+json">
+            {JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "BreadcrumbList",
+              "itemListElement": [
+                {
+                  "@type": "ListItem",
+                  "position": 1,
+                  "name": "Home",
+                  "item": "https://luxestayhaven.com"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 2,
+                  "name": "Hotels",
+                  "item": "https://luxestayhaven.com/search"
+                },
+                {
+                  "@type": "ListItem",
+                  "position": 3,
+                  "name": hotel.name,
+                  "item": pageUrl
+                }
+              ]
+            })}
+          </script>
+      </Helmet>
       <Header />
 
       <main className="pt-24 pb-20"> 
@@ -457,7 +565,7 @@ const similarHotels = useMemo(() => {
               <h2 className="font-display text-2xl font-medium mb-8">Similar Hotels You May Like</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {similarHotels.map(similarHotel => (
-                  <HotelCard key={similarHotel.id} hotel={similarHotel} />
+                  <HotelCard key={getHotelKey(similarHotel)} hotel={similarHotel} />
                 ))}
               </div>
             </div>

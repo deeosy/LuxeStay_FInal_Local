@@ -1,18 +1,20 @@
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, ExternalLink } from 'lucide-react';
 import useFavoritesStore from '@/stores/useFavoritesStore';
+import { trackAffiliateRedirect } from '@/utils/analytics';
 
-// Create SEO-friendly slug from hotel name
-const createSlug = (name) => {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-};
 
 const HotelCard = ({ hotel, variant = 'default' }) => {
+  const [searchParams] = useSearchParams();
+  const isDebug = searchParams.get('debug') === 'true';
   const { isFavorite, toggleFavorite } = useFavoritesStore();
   const hotelId = hotel.liteApiId || hotel.id;
+
+  const seoCity = hotel.citySlug || hotel.city || null;
+  const linkTo = seoCity 
+    ? `/hotel/${hotelId}?city=${seoCity}` 
+    : `/hotel/${hotelId}`;
+
   const favorited = isFavorite(hotelId);
 
   const handleFavoriteClick = (e) => {
@@ -23,8 +25,40 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
 
   const handleBookClick = (e) => {
     if (hotel.bookingUrl) {
+      if (isDebug) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.group('🐞 DEBUG: HotelCard Redirect');
+          console.log('Affiliate URL:', hotel.bookingUrl);
+          console.log('Hotel ID:', hotelId);
+          console.log('City:', seoCity || hotel.city);
+          
+          try {
+            const urlObj = new URL(hotel.bookingUrl);
+            const params = urlObj.searchParams;
+            console.log('--- URL Params ---');
+            console.log('Full Params:', Object.fromEntries(params.entries()));
+          } catch(err) {}
+          console.groupEnd();
+
+          if (window.confirm('DEBUG MODE: Redirecting to affiliate (HotelCard). Proceed?')) {
+             trackAffiliateRedirect({
+                hotel_id: hotelId,
+                city: seoCity || hotel.city,
+             });
+             window.location.href = hotel.bookingUrl;
+          }
+          return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
+      
+      trackAffiliateRedirect({
+        hotel_id: hotelId,
+        city: seoCity || hotel.city,
+      });
+
       window.location.href = hotel.bookingUrl;
     }
   };
@@ -32,7 +66,7 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
   if (variant === 'featured') {
     return (
       <Link
-        to={`/hotel/${hotelId}`}
+        to={linkTo}
         className="group card-luxury cursor-pointer block"
       >
         <div className="relative aspect-[4/3] overflow-hidden">
@@ -80,7 +114,7 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
   return (
     <div className="group card-luxury relative flex flex-col h-full">
       <Link
-        to={`/hotel/${hotelId}`}
+        to={linkTo}
         className="block relative aspect-[4/3] overflow-hidden"
       >
         <img
@@ -107,7 +141,7 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
       </Link>
       
       <div className="p-5 flex flex-col flex-grow">
-        <Link to={`/hotel/${hotelId}`} className="block mb-2">
+        <Link to={linkTo} className="block mb-2">
           <div className="flex items-center gap-1 mb-2">
             <Star className="w-4 h-4 fill-accent text-accent" />
             <span className="text-sm font-medium">{hotel.rating}</span>
@@ -165,7 +199,7 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
             </a>
           ) : (
             <Link 
-              to={`/hotel/${hotelId}`}
+              to={linkTo}
               className="w-full flex items-center justify-center gap-2 bg-secondary text-secondary-foreground py-2 px-4 rounded-lg font-medium hover:bg-secondary/80 transition-colors text-sm"
             >
               View Details

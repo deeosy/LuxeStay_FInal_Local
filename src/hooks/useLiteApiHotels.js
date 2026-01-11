@@ -1,110 +1,108 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { allHotels as staticHotels } from '@/data/hotels';
+import { trackAffiliateRedirect, trackBookingClick, trackSearch } from '@/utils/analytics';
 
 /**
  * Hook to fetch hotels from LiteAPI via edge function
  * Falls back to static data if API is unavailable
  */
-export function useLiteApiSearch({ destination, locationId, checkIn, checkOut, guests, rooms, enabled = true }) {
+export function useLiteApiSearch({
+  destination,
+  locationId,
+  checkIn,
+  checkOut,
+  guests = 2,
+  rooms = 1,
+  enabled = true
+}) {
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [source, setSource] = useState('static');
 
+  const requestKey = useMemo(() => {
+    return JSON.stringify({
+      destination,
+      locationId,
+      checkIn,
+      checkOut,
+      guests,
+      rooms,
+      enabled,
+    });
+  }, [destination, locationId, checkIn, checkOut, guests, rooms, enabled]);
+
   useEffect(() => {
-    if (!enabled) {
-      setHotels(staticHotels);
-      setSource('static');
-      return;
-    }
+    if (!enabled || (!destination && !locationId)) return;
 
     const fetchHotels = async () => {
-      // If no destination, show static hotels filtered by any search
-      if (!destination) {
-        setHotels(staticHotels);
-        setSource('static');
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
       setError(null);
 
       try {
         const params = new URLSearchParams({
           action: 'search',
-          destination: destination || '',
-          limit: '20',
+          guests: guests.toString(),
+          rooms: rooms.toString(),
         });
-        
+
+        if (destination) params.set('destination', destination);
         if (locationId) params.set('locationId', locationId);
-        
         if (checkIn) params.set('checkIn', checkIn);
         if (checkOut) params.set('checkOut', checkOut);
-        if (guests) params.set('guests', guests.toString());
-        if (rooms) params.set('rooms', rooms.toString());
 
         console.log('Fetching LiteAPI hotels:', params.toString());
 
-        const { data, error: fnError } = await supabase.functions.invoke('liteapi', {
-          body: null,
-          headers: {},
-        }, { 
-          method: 'GET',
+        // Track search event
+        trackSearch({
+          destination,
+          check_in: checkIn,
+          check_out: checkOut,
+          guests,
+          rooms,
         });
 
-        // Use fetch directly since we need GET with query params
-        const response = await fetch(
+        const res = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/liteapi?${params.toString()}`,
           {
-            method: 'GET',
             headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              'Content-Type': 'application/json',
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
           }
         );
 
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
-        }
+        const data = await res.json();
 
-        const result = await response.json();
-        
-        if (result.hotels && result.hotels.length > 0) {
-          console.log(`Got ${result.hotels.length} hotels from ${result.source}`);
-          setHotels(result.hotels);
-          setSource(result.source || 'liteapi');
+        if (data.hotels) {
+          console.log(`Got ${data.hotels.length} hotels from ${data.source}`);
+          setHotels(data.hotels);
+          setSource(data.source || 'liteapi');
         } else {
-          // No results from LiteAPI
-          console.log('No LiteAPI results');
-          setHotels([]);
-          setSource('liteapi-empty');
+          throw new Error('No hotels returned');
         }
       } catch (err) {
-        console.error('LiteAPI fetch error:', err);
+        console.error('LiteAPI search error:', err);
         setError(err.message);
-        
-        // Return empty on error, do not show fake hotels
-        setHotels([]);
-        setSource('error');
+        setHotels(staticHotels);
+        setSource('static-fallback');
       } finally {
         setLoading(false);
       }
     };
 
     fetchHotels();
-  }, [destination, checkIn, checkOut, guests, enabled]);
+  }, [requestKey]);
 
   return { hotels, loading, error, source };
 }
+
 
 /**
  * Hook to fetch single hotel detail from LiteAPI
  * Falls back to static data if API is unavailable
  */
-export function useLiteApiHotelDetail({ hotelId, checkIn, checkOut, guests, enabled = true }) {
+export function useLiteApiHotelDetail({ hotelId, checkIn, checkOut, guests, rooms, enabled = true }) {
   const [hotel, setHotel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

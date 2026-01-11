@@ -40,7 +40,9 @@ export const AFFILIATE_CONFIG = {
         url.searchParams.set('checkin', params.checkIn);
         url.searchParams.set('checkout', params.checkOut);
         url.searchParams.set('group_adults', params.guests);
+        if (params.rooms) url.searchParams.set('no_rooms', params.rooms);
         url.searchParams.set('aid', params.affiliateId);
+        if (params.city) url.searchParams.set('city', params.city);
         return url.toString();
       },
     },
@@ -91,6 +93,8 @@ export const buildAffiliateUrl = ({
   checkIn,
   checkOut,
   guests,
+  rooms,
+  city,
   provider = AFFILIATE_CONFIG.activeProvider,
 }) => {
   const providerConfig = AFFILIATE_CONFIG.providers[provider];
@@ -107,6 +111,7 @@ export const buildAffiliateUrl = ({
     checkOut,
     guests,
     rooms,
+    city,
     affiliateId: AFFILIATE_CONFIG.affiliateId,
   });
 };

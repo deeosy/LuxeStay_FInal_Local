@@ -7,12 +7,19 @@ import HotelCard from '@/components/HotelCard';
 import { useLiteApiSearch } from '@/hooks/useLiteApiHotels';
 import { getCityBySlug, cities } from '@/data/cities';
 import useBookingStore from '@/stores/useBookingStore';
+import { trackCityView } from '@/utils/analytics';
 import { Loader2, MapPin, Calendar, DollarSign, ArrowRight, Filter, Trophy, ShieldCheck, CheckCircle } from 'lucide-react';
 
 
 const DestinationPage = () => {
   const { citySlug } = useParams();
   const destinationConfig = getCityBySlug(citySlug);
+
+  useEffect(() => {
+    if (destinationConfig) {
+      trackCityView(destinationConfig.cityName);
+    }
+  }, [destinationConfig]);
 
   // Redirect to 404 if destination not found
   if (!destinationConfig) {
@@ -72,16 +79,81 @@ const DestinationPage = () => {
   // Get other cities for internal linking
   const otherCities = cities.filter(c => c.citySlug !== citySlug).slice(0, 4);
 
+  // Helper to strip HTML from text
+  const stripHtml = (html) => {
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  };
+
+  const metaDescription = destinationConfig 
+    ? `${destinationConfig.shortIntro} ${stripHtml(destinationConfig.longDescription)}`.substring(0, 160) + '...'
+    : '';
+
+  const pageUrl = `https://luxestayhaven.com/hotels-in/${citySlug}`;
+  const pageTitle = `Hotels in ${destinationConfig.cityName} – Best Deals & Discounts | LuxeStay`;
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Helmet>
-        <title>{destinationConfig.title}</title>
-        <meta name="description" content={destinationConfig.description} />
-        <meta property="og:title" content={destinationConfig.title} />
-        <meta property="og:description" content={destinationConfig.description} />
+        {/* Core SEO */}
+        <title>{pageTitle}</title>
+        <meta name="description" content={metaDescription} />
+        <link rel="canonical" href={pageUrl} />
+
+        {/* Open Graph */}
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={metaDescription} />
+        <meta property="og:url" content={pageUrl} />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content={`https://luxestay.com/hotels-in/${citySlug}`} />
-        <link rel="canonical" href={`https://luxestay.com/hotels-in/${citySlug}`} />
+        <meta property="og:image" content={destinationConfig.image} />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={metaDescription} />
+        <meta name="twitter:image" content={destinationConfig.image} />
+
+        {/* JSON-LD: TouristDestination */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "TouristDestination",
+            "name": destinationConfig.cityName,
+            "description": stripHtml(destinationConfig.longDescription),
+            "url": pageUrl,
+            "image": destinationConfig.image,
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": destinationConfig.cityName,
+              "addressCountry": destinationConfig.country
+            }
+          })}
+        </script>
+
+        {/* JSON-LD: Breadcrumb */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": "https://luxestayhaven.com"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": `Hotels in ${destinationConfig.cityName}`,
+                "item": pageUrl
+              }
+            ]
+          })}
+        </script>
+
+        {/* JSON-LD: SearchResultsPage */}
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
@@ -113,8 +185,8 @@ const DestinationPage = () => {
           })}
         </script>
       </Helmet>
-      <Header />
-      
+
+      <Header />      
       <main className="flex-grow container mx-auto px-4 py-8">
         {/* SEO Intro Section */}
         <div className="mb-12 max-w-4xl mx-auto text-center">
@@ -366,7 +438,7 @@ const DestinationPage = () => {
               {hotels.map((hotel) => (
                 <li key={`seo-${hotel.id}`}>
                   <Link 
-                    to={`/hotel/${hotel.liteApiId || hotel.id}`}
+                    to={`/hotel/${hotel.liteApiId || hotel.id}?city=${destinationConfig.citySlug}`}
                     className="text-gray-600 hover:text-primary hover:underline transition-colors block truncate text-sm"
                   >
                     {hotel.name} in {destinationConfig.cityName}

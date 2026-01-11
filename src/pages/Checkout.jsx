@@ -23,6 +23,8 @@ const formatDate = (dateString) => {
 const Checkout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isDebug = searchParams.get('debug') === 'true';
+  const seoCity = searchParams.get('city');
   
   // Read all booking-critical data from global store
   const { 
@@ -100,6 +102,7 @@ const Checkout = () => {
         checkOut,
         guests,
         rooms,
+        city: seoCity,
       })
     : null;
 
@@ -149,10 +152,55 @@ const Checkout = () => {
       return;
     }
 
+    if (isDebug) {
+      console.group('🐞 DEBUG: Affiliate Booking Redirect');
+      console.log('Affiliate URL:', affiliateUrl);
+      console.log('Booking URL (from hotel data):', selectedHotel.bookingUrl);
+      console.log('City:', seoCity || selectedHotel.city);
+      console.log('Hotel ID:', selectedHotel.id || selectedHotel.liteApiId);
+      console.log('Check-in:', checkIn);
+      console.log('Check-out:', checkOut);
+      console.log('Guests:', guests);
+      console.log('Rooms:', rooms);
+      
+      if (affiliateUrl) {
+        try {
+          const urlObj = new URL(affiliateUrl);
+          const params = urlObj.searchParams;
+          console.group('URL Parameter Verification');
+          console.log('Has Check-in:', params.has('checkIn') || params.has('checkin') || params.has('check_in') ? '✅' : '❌');
+          console.log('Has Check-out:', params.has('checkOut') || params.has('checkout') || params.has('check_out') ? '✅' : '❌');
+          console.log('Has Guests:', params.has('guests') || params.has('adults') ? '✅' : '❌');
+          console.log('Has Rooms:', params.has('rooms') ? '✅' : '❌');
+          // Assuming 'refid' is the partner ID param based on common LiteAPI patterns, or just check existence
+          console.log('Full Params:', Object.fromEntries(params.entries()));
+          console.groupEnd();
+        } catch (err) {
+          console.error('Invalid Affiliate URL:', err);
+        }
+      }
+      console.groupEnd();
+
+      if (!window.confirm('DEBUG MODE: Ready to redirect. Check console for details. Proceed?')) {
+        return;
+      }
+    }
+
     setIsProcessing(true);
 
     // Simulate brief processing before redirect
     await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Track booking click
+    trackBookingClick({
+      hotel_id: selectedHotel.id || selectedHotel.liteApiId,
+      city: seoCity || selectedHotel.city,
+      price: priceBreakdown.total,
+      check_in: checkIn,
+      check_out: checkOut,
+      guests,
+      rooms,
+    });
 
     // Show toast and redirect to affiliate partner
     toast.success('Redirecting to our booking partner...');
@@ -188,6 +236,33 @@ const Checkout = () => {
           <h1 className="heading-display text-3xl md:text-4xl mb-8">
             Complete Your Booking
           </h1>
+
+          {isDebug && (
+            <div className="bg-yellow-50 border-l-4 border-yellow-500 text-yellow-900 p-4 mb-8 rounded-r shadow-sm">
+              <div className="flex items-center gap-2 font-bold mb-2">
+                <span className="text-xl">🐞</span>
+                <span>Debug Affiliate Mode Active</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-sm font-mono">
+                <div>
+                  <span className="font-semibold text-yellow-800">Hotel ID:</span> {selectedHotel?.id || selectedHotel?.liteApiId}
+                </div>
+                <div>
+                  <span className="font-semibold text-yellow-800">City:</span> {seoCity || selectedHotel?.city}
+                </div>
+                <div>
+                  <span className="font-semibold text-yellow-800">Dates:</span> {checkIn} → {checkOut}
+                </div>
+                <div>
+                  <span className="font-semibold text-yellow-800">Guests/Rooms:</span> {guests} / {rooms}
+                </div>
+                <div className="col-span-full mt-2 pt-2 border-t border-yellow-200 break-all">
+                  <span className="font-semibold text-yellow-800">Affiliate Link:</span>
+                  <div className="text-xs mt-1 bg-white/50 p-2 rounded">{affiliateUrl || 'Not generated'}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Form */}
