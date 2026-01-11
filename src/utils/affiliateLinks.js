@@ -6,9 +6,9 @@
  */
 
 // Affiliate configuration (placeholder - swap providers here)
-const AFFILIATE_CONFIG = {
+export const AFFILIATE_CONFIG = {
   // Default affiliate ID
-  affiliateId: 'demo123',
+  affiliateId: import.meta.env.VITE_AFFILIATE_ID,
   
   // Provider configurations - add new providers here
   providers: {
@@ -22,6 +22,7 @@ const AFFILIATE_CONFIG = {
         url.searchParams.set('checkin', params.checkIn);
         url.searchParams.set('checkout', params.checkOut);
         url.searchParams.set('guests', params.guests);
+        url.searchParams.set('rooms', params.rooms);
         url.searchParams.set('aff_id', params.affiliateId);
         url.searchParams.set('utm_source', 'luxestay');
         url.searchParams.set('utm_medium', 'affiliate');
@@ -61,7 +62,7 @@ const AFFILIATE_CONFIG = {
   },
   
   // Current active provider
-  activeProvider: 'placeholder',
+  activeProvider: import.meta.env.VITE_AFFILIATE_PROVIDER
 };
 
 /**
@@ -96,20 +97,18 @@ export const buildAffiliateUrl = ({
   
   if (!providerConfig) {
     console.warn(`Unknown affiliate provider: ${provider}, falling back to placeholder`);
-    return buildAffiliateUrl({ hotel, checkIn, checkOut, guests, provider: 'placeholder' });
+    return buildAffiliateUrl({ hotel, checkIn, checkOut, guests, rooms, provider: 'placeholder' });
   }
-  
-  const params = {
-    hotelId: hotel.id,
+
+  return providerConfig.buildUrl({
+    hotelId: hotel.liteApiId || hotel.id,
     hotelSlug: createSlug(hotel.name),
-    hotelName: hotel.name,
-    checkIn: checkIn || '',
-    checkOut: checkOut || '',
-    guests: guests || 2,
+    checkIn,
+    checkOut,
+    guests,
+    rooms,
     affiliateId: AFFILIATE_CONFIG.affiliateId,
-  };
-  
-  return providerConfig.buildUrl(params);
+  });
 };
 
 /**

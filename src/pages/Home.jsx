@@ -3,6 +3,7 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HeroSearch from '@/components/HeroSearch';
 import FeaturedHotels from '@/components/FeaturedHotels';
+import { cities } from '@/data/cities';
 import Stats from '@/components/Stats';
 import heroImage from '@/assets/hero-hotel.jpg';
 import { ArrowRight, Shield, Clock, Award } from 'lucide-react';
@@ -92,6 +93,56 @@ const Home = () => {
 
       {/* Featured Hotels */}
       <FeaturedHotels />
+
+      {/* Hot Destinations */}
+      <section className="py-20 bg-gray-50">
+        <div className="container-luxury">
+          <div className="text-center mb-12">
+            <p className="section-title">Destinations</p>
+            <h2 className="heading-display text-3xl md:text-4xl">
+              Hot Hotel Destinations
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {cities.slice(0, 4).map((city) => (
+              <Link
+                key={city.citySlug}
+                to={`/hotels-in/${city.citySlug}`}
+                className="group relative overflow-hidden rounded-xl aspect-[3/4] block"
+              >
+                <div className="absolute inset-0 bg-gray-900/20 group-hover:bg-gray-900/10 transition-colors z-10" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent z-20" />
+                
+                {/* Fallback pattern since we don't have city images in registry yet */}
+                <div className="absolute inset-0 bg-gray-300 group-hover:scale-105 transition-transform duration-700" />
+                
+                <div className="absolute bottom-0 left-0 right-0 p-6 z-30 text-white">
+                  <h3 className="text-2xl font-bold mb-1 group-hover:translate-x-1 transition-transform">
+                    {city.cityName}
+                  </h3>
+                  <p className="text-sm text-white/80 mb-3 flex items-center gap-1">
+                    {city.country}
+                  </p>
+                  <span className="inline-flex items-center text-sm font-medium text-accent opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0 duration-300">
+                    Explore Hotels <ArrowRight className="w-4 h-4 ml-1" />
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+
+          <div className="text-center mt-10">
+            <Link
+              to="/destinations"
+              className="btn-outline inline-flex items-center gap-2"
+            >
+              View All Destinations
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* Why Choose Us */}
       <section className="py-20 bg-background">

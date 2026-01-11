@@ -32,17 +32,36 @@ function setCache(key: string, data: any, ttl: number): void {
 
 // Normalize LiteAPI hotel data to match our frontend format
 function normalizeHotel(hotel: any, rates?: any) {
-  const firstRate = rates?.rooms?.[0]?.rates?.[0];
+  // 1. Dig deep into the rates structure
+  const firstRoom = rates?.rooms?.[0];
+  const firstRate = firstRoom?.rates?.[0];
+
+  // 2. Identify the PRICE
   const price = firstRate?.retailRate?.total?.amount 
     ? Math.round(firstRate.retailRate.total.amount / (rates?.nights || 1))
     : hotel.pricePerNight || 0;
+
+  // 3. PRIORITY URL MAPPING (Crucial for live bookings)
+  // We ignore hotel.booking_url because it's usually the sandbox fallback
+  // Extract booking URL from various potential locations in LiteAPI response
+  const bookingUrl = 
+    hotel.booking_url || 
+    hotel.deeplink || 
+    hotel.partner_booking_url || 
+    firstRate?.booking_url ||
+    firstRate?.deeplink ||
+    firstRate?.paymentUrl ||
+    null;
 
   return {
     id: hotel.id || hotel.hotelId,
     liteApiId: hotel.id || hotel.hotelId,
     name: hotel.name || hotel.hotelName || 'Unknown Hotel',
     location: [hotel.city, hotel.country].filter(Boolean).join(', ') || hotel.address || 'Unknown Location',
+    city: hotel.city,
+    country: hotel.country,
     price: price,
+    bookingUrl, // This will now be passed to your React frontend
     rating: hotel.starRating || hotel.rating || 4.5,
     reviews: hotel.reviewsCount || Math.floor(Math.random() * 500) + 50,
     image: hotel.main_photo || hotel.mainPhoto || hotel.images?.[0] || '/placeholder.svg',
@@ -55,7 +74,7 @@ function normalizeHotel(hotel: any, rates?: any) {
     address: hotel.address || '',
     latitude: hotel.latitude,
     longitude: hotel.longitude,
-    rawData: hotel,
+    rawData: { hotel, rates },
   };
 }
 
@@ -136,9 +155,10 @@ async function getHotelRates(
   hotelIds: string[], 
   checkIn: string, 
   checkOut: string, 
-  guests: number
+  guests: number,
+  rooms: number = 1
 ): Promise<any[]> {
-  const cacheKey = `rates:${hotelIds.sort().join(',')}:${checkIn}:${checkOut}:${guests}`;
+  const cacheKey = `rates:${hotelIds.sort().join(',')}:${checkIn}:${checkOut}:${guests}:${rooms}`;
   const cached = getCached<any[]>(cacheKey);
   if (cached) return cached;
 
@@ -149,7 +169,7 @@ async function getHotelRates(
       checkout: checkOut,
       currency: 'USD',
       guestNationality: 'US',
-      occupancies: [{ rooms: 1, adults: guests, children: [] }],
+      occupancies: [{ rooms: rooms, adults: guests, children: [] }],
       hotelIds: hotelIds,
       includeHotelData: true,
     };
@@ -208,6 +228,7 @@ serve(async (req) => {
       const checkIn = url.searchParams.get('checkIn') || '';
       const checkOut = url.searchParams.get('checkOut') || '';
       const guests = parseInt(url.searchParams.get('guests') || '2');
+      const rooms = parseInt(url.searchParams.get('rooms') || '1');
       const limit = parseInt(url.searchParams.get('limit') || '20');
 
       if (!destination) {
@@ -220,11 +241,16 @@ serve(async (req) => {
 
       console.log(`Searching: destination="${destination}", checkIn=${checkIn}, checkOut=${checkOut}, guests=${guests}`);
 
-      // Step 1: Get placeId from destination name
-      const placeId = await getPlaceId(apiKey, destination);
+      // Step 1: Get placeId from destination name or use provided locationId
+      const locationId = url.searchParams.get('locationId');
+      let placeId = locationId;
+
+      if (!placeId && destination) {
+        placeId = await getPlaceId(apiKey, destination);
+      }
       
       if (!placeId) {
-        console.log(`No placeId found for "${destination}", returning empty`);
+        console.log(`No placeId found for "${destination}" and no locationId provided, returning empty`);
         return new Response(
           JSON.stringify({ hotels: [], message: `No results for "${destination}"` }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -250,7 +276,7 @@ serve(async (req) => {
         if (ratesData.length > 0) {
           const hotelsWithRates = ratesData.map((item: any) => {
             const hotel = item.hotelData || hotelData.find(h => (h.id || h.hotelId) === item.hotelId) || item;
-            return normalizeHotel(hotel, { rooms: item.rooms, nights: item.nights });
+            return normalizeHotel(hotel, item);
           });
           
           console.log(`Returning ${hotelsWithRates.length} hotels with rates`);
@@ -306,11 +332,11 @@ serve(async (req) => {
 
       // Get rates if dates provided
       if (checkIn && checkOut) {
-        const ratesData = await getHotelRates(apiKey, [hotelId], checkIn, checkOut, guests);
+        const ratesData = await getHotelRates(apiKey, [hotelId], checkIn, checkOut, guests, rooms);
         if (ratesData.length > 0) {
           hotel = normalizeHotel(
             ratesData[0].hotelData || detailData.data,
-            { rooms: ratesData[0].rooms, nights: ratesData[0].nights }
+            ratesData[0]
           );
         }
       }

@@ -30,6 +30,7 @@ const Checkout = () => {
     checkIn,
     checkOut,
     guests, 
+    rooms,
     getNights,
     getPriceBreakdown,
     clearBooking,
@@ -52,6 +53,7 @@ const Checkout = () => {
   const urlCheckIn = searchParams.get('checkIn');
   const urlCheckOut = searchParams.get('checkOut');
   const urlGuests = parseInt(searchParams.get('guests')) || 2;
+  const urlRooms = parseInt(searchParams.get('rooms')) || 1;
 
   // Check if it's a static hotel
   const staticHotel = urlHotelId ? allHotels.find((h) => h.id === parseInt(urlHotelId)) : null;
@@ -97,6 +99,7 @@ const Checkout = () => {
         checkIn,
         checkOut,
         guests,
+        rooms,
       })
     : null;
 

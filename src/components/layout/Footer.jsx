@@ -1,16 +1,15 @@
 import { Link } from 'react-router-dom';
 import { MapPin, Phone, Mail, Instagram, Facebook, Twitter } from 'lucide-react';
+import { cities } from '@/data/cities';
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
 
   const footerLinks = {
-    discover: [
-      { name: 'Hotels', path: '/search' },
-      { name: 'Resorts', path: '/search' },
-      { name: 'Destinations', path: '/search' },
-      { name: 'Special Offers', path: '/search' },
-    ],
+    discover: cities.map(city => ({
+      name: `Hotels in ${city.cityName}`,
+      path: `/hotels-in/${city.citySlug}`
+    })),
     company: [
       { name: 'About Us', path: '/' },
       { name: 'Careers', path: '/' },
@@ -23,7 +22,7 @@ const Footer = () => {
       { name: 'Privacy Policy', path: '/' },
       { name: 'Terms of Service', path: '/' },
     ],
-  };
+  }; 
 
   return (
     <footer className="bg-primary text-primary-foreground">

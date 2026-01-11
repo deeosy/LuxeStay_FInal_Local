@@ -110,8 +110,8 @@ const SearchResults = () => {
   });
 
   const filteredHotels = useMemo(() => {
-    // Start with LiteAPI results or fallback to static
-    let results = liteApiHotels.length > 0 ? [...liteApiHotels] : [...allHotels];
+    // Use LiteAPI results (or empty if none found)
+    let results = [...liteApiHotels];
 
     // Filter by search query (already filtered by API, but apply local filter for static fallback)
     if (searchQuery && source?.includes('static')) {

@@ -6,7 +6,7 @@ import { allHotels as staticHotels } from '@/data/hotels';
  * Hook to fetch hotels from LiteAPI via edge function
  * Falls back to static data if API is unavailable
  */
-export function useLiteApiSearch({ destination, checkIn, checkOut, guests, enabled = true }) {
+export function useLiteApiSearch({ destination, locationId, checkIn, checkOut, guests, rooms, enabled = true }) {
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -34,13 +34,16 @@ export function useLiteApiSearch({ destination, checkIn, checkOut, guests, enabl
       try {
         const params = new URLSearchParams({
           action: 'search',
-          destination,
+          destination: destination || '',
           limit: '20',
         });
+        
+        if (locationId) params.set('locationId', locationId);
         
         if (checkIn) params.set('checkIn', checkIn);
         if (checkOut) params.set('checkOut', checkOut);
         if (guests) params.set('guests', guests.toString());
+        if (rooms) params.set('rooms', rooms.toString());
 
         console.log('Fetching LiteAPI hotels:', params.toString());
 
@@ -74,28 +77,18 @@ export function useLiteApiSearch({ destination, checkIn, checkOut, guests, enabl
           setHotels(result.hotels);
           setSource(result.source || 'liteapi');
         } else {
-          // Fallback: filter static hotels by destination
-          console.log('No LiteAPI results, falling back to static data');
-          const filtered = staticHotels.filter(h => 
-            h.location.toLowerCase().includes(destination.toLowerCase()) ||
-            h.name.toLowerCase().includes(destination.toLowerCase())
-          );
-          setHotels(filtered.length > 0 ? filtered : staticHotels);
-          setSource('static-fallback');
+          // No results from LiteAPI
+          console.log('No LiteAPI results');
+          setHotels([]);
+          setSource('liteapi-empty');
         }
       } catch (err) {
         console.error('LiteAPI fetch error:', err);
         setError(err.message);
         
-        // Fallback to static data on error
-        const filtered = destination 
-          ? staticHotels.filter(h => 
-              h.location.toLowerCase().includes(destination.toLowerCase()) ||
-              h.name.toLowerCase().includes(destination.toLowerCase())
-            )
-          : staticHotels;
-        setHotels(filtered.length > 0 ? filtered : staticHotels);
-        setSource('static-error');
+        // Return empty on error, do not show fake hotels
+        setHotels([]);
+        setSource('error');
       } finally {
         setLoading(false);
       }
@@ -156,6 +149,7 @@ export function useLiteApiHotelDetail({ hotelId, checkIn, checkOut, guests, enab
         if (checkIn) params.set('checkIn', checkIn);
         if (checkOut) params.set('checkOut', checkOut);
         if (guests) params.set('guests', guests.toString());
+        if (rooms) params.set('rooms', rooms.toString());
 
         console.log('Fetching LiteAPI hotel detail:', params.toString());
 

@@ -1,9 +1,11 @@
 import { useParams, useNavigate, Link, createSearchParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import HotelCard from '@/components/HotelCard';
 import { allHotels } from '@/data/hotels';
-import { useLiteApiHotelDetail } from '@/hooks/useLiteApiHotels';
+import { useLiteApiHotelDetail, useLiteApiSearch } from '@/hooks/useLiteApiHotels';
+import { cities } from '@/data/cities';
 import useBookingStore from '@/stores/useBookingStore';
 import {
   Star,
@@ -22,7 +24,7 @@ import {
   Loader2,
 } from 'lucide-react';
 
-const amenityIcons = {
+const facilityIcons = {
   Spa: Waves,
   Pool: Waves,
   'Private Pool': Waves,
@@ -103,6 +105,37 @@ const HotelDetail = () => {
     }
   }, [hotel, setSelectedHotel]);
 
+  // Determine city for similar hotels
+  const cityForSearch = hotel ? (hotel.city || (hotel.location && hotel.location.split(',')[0])) : '';
+  const knownCity = cities.find(c => cityForSearch && c.cityName.toLowerCase() === cityForSearch.toLowerCase());
+  const searchDestination = knownCity ? knownCity.query : cityForSearch;
+
+  // Fetch similar hotels
+  const { hotels: similarHotelsRaw, loading: loadingSimilar } = useLiteApiSearch({
+    destination: searchDestination,
+    enabled: !!searchDestination && !loading
+  });
+
+const getHotelKey = (h) => {
+  return h?.hotelId || h?.liteApiId || h?.id || null;
+};
+
+const similarHotels = useMemo(() => {
+  if (!similarHotelsRaw || !hotel) return [];
+
+  const currentId = getHotelKey(hotel);
+  if (!currentId) return [];
+
+  return similarHotelsRaw
+    .filter(h => {
+      const id = getHotelKey(h);
+      return id && id !== currentId;
+    })
+    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+    .slice(0, 3);
+}, [similarHotelsRaw, hotel]);
+
+
   // Loading state for LiteAPI hotels
   if (isLiteApiHotel && loading) {
     return (
@@ -133,6 +166,22 @@ const HotelDetail = () => {
   }
 
   const handleBookNow = () => {
+    // Track booking click
+    console.log('booking_click', {
+      hotelId: hotel.liteApiId || hotel.id,
+      city: hotel.location,
+      price: hotel.price,
+      dates: { checkIn, checkOut },
+      source: 'liteapi'
+    });
+
+    // Use LiteAPI deep link if available
+    if (hotel.bookingUrl) {
+      window.location.href = hotel.bookingUrl;
+      return;
+    }
+
+    // Fallback for static hotels (keep existing flow for demo purposes)
     setSelectedHotel(hotel);
     
     // Navigate to checkout with URL params for refresh support
@@ -143,6 +192,7 @@ const HotelDetail = () => {
     if (checkIn) params.checkIn = checkIn;
     if (checkOut) params.checkOut = checkOut;
     if (guests && guests !== 2) params.guests = guests.toString();
+    if (rooms && rooms !== 1) params.rooms = rooms.toString();
     
     navigate({
       pathname: '/checkout',
@@ -159,11 +209,18 @@ const HotelDetail = () => {
   // Limit guest selection to hotel capacity
   const maxGuests = hotel.guests;
 
+  // Internal Linking Logic
+  const cityName = knownCity ? knownCity.cityName : (hotel.city || 'City');
+  const citySlug = knownCity ? knownCity.citySlug : null;
+  const nearbyCities = cities
+    .filter(c => c.citySlug !== citySlug)
+    .slice(0, 3);
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
-      <main className="pt-24 pb-20">
+      <main className="pt-24 pb-20"> 
         <div className="container-luxury">
           {/* Breadcrumb & Actions */}
           <div className="flex items-center justify-between mb-6">
@@ -283,21 +340,21 @@ const HotelDetail = () => {
                 </p>
               </div>
 
-              {/* Amenities */}
+              {/* Facilities */}
               <div className="py-8">
                 <h2 className="font-display text-xl font-medium mb-6">
                   Amenities & Services
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {hotel.amenities.map((amenity) => {
-                    const Icon = amenityIcons[amenity] || Check;
+                  {hotel.amenities.map((facility) => {
+                    const Icon = facilityIcons[facility] || Check;
                     return (
                       <div
-                        key={amenity}
+                        key={facility.facilityId || facility.name}
                         className="flex items-center gap-3 p-4 rounded-lg bg-secondary/50"
                       >
                         <Icon className="w-5 h-5 text-accent" />
-                        <span className="text-sm font-medium">{amenity}</span>
+                        <span className="text-sm font-medium">{facility.name || facility}</span>
                       </div>
                     );
                   })}
@@ -391,6 +448,42 @@ const HotelDetail = () => {
                   You won't be charged yet
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* Similar Hotels Section */}
+          {similarHotels.length > 0 && (
+            <div className="mt-16 pt-12 border-t border-border">
+              <h2 className="font-display text-2xl font-medium mb-8">Similar Hotels You May Like</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {similarHotels.map(similarHotel => (
+                  <HotelCard key={similarHotel.id} hotel={similarHotel} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Internal Linking / Explore More Section */}
+          <div className="mt-16 pt-12 border-t border-border">
+            <h2 className="font-display text-2xl font-medium mb-6">Explore more hotels in {cityName}</h2>
+            <div className="flex flex-wrap gap-4">
+              {citySlug && (
+                <Link 
+                  to={`/hotels-in/${citySlug}`}
+                  className="px-4 py-2 bg-secondary rounded-full text-sm font-medium hover:bg-secondary/80 transition-colors"
+                >
+                  Hotels in {cityName}
+                </Link>
+              )}
+              {nearbyCities.map(city => (
+                <Link 
+                  key={city.citySlug}
+                  to={`/hotels-in/${city.citySlug}`}
+                  className="px-4 py-2 bg-secondary rounded-full text-sm font-medium hover:bg-secondary/80 transition-colors"
+                >
+                  Hotels in {city.cityName}
+                </Link>
+              ))}
             </div>
           </div>
         </div>

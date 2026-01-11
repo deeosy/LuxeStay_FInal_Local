@@ -10,6 +10,9 @@ import Checkout from "./pages/Checkout";
 import Register from "./pages/Register";
 import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
+import DestinationPage from "./pages/DestinationPage";
+import Destinations from "./pages/Destinations";
+import CityCategoryPage from "./pages/CityCategoryPage";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +25,9 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<SearchResults />} />
+          <Route path="/destinations" element={<Destinations />} />
+          <Route path="/hotels-in/:citySlug" element={<DestinationPage />} />
+          <Route path="/hotels-in/:citySlug/:type" element={<CityCategoryPage />} />
           <Route path="/hotel/:id" element={<HotelDetail />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/register" element={<Register />} />
