@@ -73,8 +73,11 @@ ${urls.map(u => `
 
   console.log(`New URLs: ${newUrls.length}`);
 
-  // Change this line (temporarily comment it out) temporary code starts here ---- >
-  // if (newUrls.length === 0) return; 
+  // Do nothing if sitemap did not change
+  if (newUrls.length === 0) {
+    console.log("No new URLs – skipping Google submit");
+    return;
+  }
 
   const googleAdminToken = process.env.GOOGLE_INDEXING_ADMIN_TOKEN;
 
@@ -83,10 +86,7 @@ ${urls.map(u => `
     return;
   }
 
-  console.log("Submitting to Google Indexing API...");
-
-  // Force a test by sending just the homepage or a few URLs
-  const testUrls = newUrls.length > 0 ? newUrls : [DOMAIN]; 
+  console.log(`Submitting ${newUrls.length} URLs to Google Indexing API...`);
 
   try {
     const res = await fetch(`${DOMAIN}/.netlify/functions/submit-to-google`, {
@@ -95,39 +95,18 @@ ${urls.map(u => `
         Authorization: `Bearer ${googleAdminToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ urls: testUrls.slice(0, 100), type: "URL_UPDATED" }),
+      body: JSON.stringify({
+        urls: newUrls.slice(0, 100),   // Google API limit
+        type: "URL_UPDATED",
+      }),
     });
-
-  // < -----    temporary code ends here
-
-  // acutal code below temporary code above 
-
-  // if (newUrls.length === 0) return;
-
-  // const googleAdminToken = process.env.GOOGLE_INDEXING_ADMIN_TOKEN;
-
-  // if (!googleAdminToken) {
-  //   console.log("No Google token – skipping indexing");
-  //   return;
-  // }
-
-  // console.log("Submitting to Google Indexing API...");
-
-  // try {
-  // const res = await fetch(`${DOMAIN}/.netlify/functions/submit-to-google`, {
-  //     method: "POST",
-  //     headers: {
-  //       Authorization: `Bearer ${googleAdminToken}`,
-  //       "Content-Type": "application/json",
-  //     },
-  //     body: JSON.stringify({ urls: newUrls, type: "URL_UPDATED" }),
-  //   });
 
     const text = await res.text();
     console.log("Google Indexing response:", res.status, text);
   } catch (err) {
     console.error("Google submit failed:", err);
   }
+
 };
 
 await generateSitemap();
