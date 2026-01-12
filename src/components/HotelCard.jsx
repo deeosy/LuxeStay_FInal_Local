@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useLocation } from 'react-router-dom';
 import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, ExternalLink } from 'lucide-react';
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { trackAffiliateRedirect } from '@/utils/analytics';
@@ -6,6 +6,7 @@ import { trackAffiliateRedirect } from '@/utils/analytics';
 
 const HotelCard = ({ hotel, variant = 'default' }) => {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const isDebug = searchParams.get('debug') === 'true';
   const { isFavorite, toggleFavorite } = useFavoritesStore();
   const hotelId = hotel.liteApiId || hotel.id;
@@ -14,6 +15,17 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
   const linkTo = seoCity 
     ? `/hotel/${hotelId}?city=${seoCity}` 
     : `/hotel/${hotelId}`;
+
+  // Construct Affiliate Link with Tracking Params
+  const currentPath = location.pathname + location.search;
+  const affiliateParams = new URLSearchParams({
+      city: seoCity || hotel.city || '',
+      hotel: hotel.name || '',
+      price: hotel.price ? hotel.price.toString() : '',
+      page: currentPath
+  }).toString();
+  
+  const affiliateLink = `/go/hotel/${hotelId}?${affiliateParams}`;
 
   const favorited = isFavorite(hotelId);
 

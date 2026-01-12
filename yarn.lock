@@ -1230,7 +1230,7 @@
 
 "@supabase/supabase-js@^2.90.1":
   version "2.90.1"
-  resolved "https://registry.npmjs.org/@supabase/supabase-js/-/supabase-js-2.90.1.tgz"
+  resolved "https://registry.yarnpkg.com/@supabase/supabase-js/-/supabase-js-2.90.1.tgz#a54f491f1a6b169d821adad929477e3d87cb6dcd"
   integrity sha512-U8KaKGLUgTIFHtwEW1dgw1gK7XrdpvvYo7nzzqPx721GqPe8WZbAiLh/hmyKLGBYQ/mmQNr20vU9tWSDZpii3w==
   dependencies:
     "@supabase/auth-js" "2.90.1"

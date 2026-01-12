@@ -17,6 +17,7 @@ import DestinationPage from "./pages/DestinationPage";
 import Destinations from "./pages/Destinations";
 import CityCategoryPage from "./pages/CityCategoryPage";
 import PoiLandingPage from "./pages/PoiLandingPage";
+import AdminAffiliate from "./pages/AdminAffiliate";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/register" element={<Register />} />
             <Route path="/account" element={<Account />} />
+            <Route path="/admin/affiliate" element={<AdminAffiliate />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
