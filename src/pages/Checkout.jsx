@@ -8,6 +8,7 @@ import { useLiteApiHotelDetail } from '@/hooks/useLiteApiHotels';
 import { buildAffiliateUrl } from '@/utils/affiliateLinks';
 import { Check, CreditCard, Lock, ChevronLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { trackAffiliateRedirect, trackBookingClick, trackHotelView } from '@/utils/analytics';
 
 // Helper to format date for display
 const formatDate = (dateString) => {

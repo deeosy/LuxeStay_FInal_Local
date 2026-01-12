@@ -454,15 +454,17 @@ const similarHotels = useMemo(() => {
                   Amenities & Services
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {hotel.amenities.map((facility) => {
-                    const Icon = facilityIcons[facility] || Check;
+                  {hotel.amenities.map((facility, index) => {
+                    const name = typeof facility === "string" ? facility : facility.name;
+                    const Icon = facilityIcons[name] || Check;
+
                     return (
                       <div
-                        key={facility.facilityId || facility.name}
+                        key={`${name}-${index}`}
                         className="flex items-center gap-3 p-4 rounded-lg bg-secondary/50"
                       >
                         <Icon className="w-5 h-5 text-accent" />
-                        <span className="text-sm font-medium">{facility.name || facility}</span>
+                        <span className="text-sm font-medium">{name}</span>
                       </div>
                     );
                   })}
