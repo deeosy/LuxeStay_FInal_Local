@@ -1,6 +1,5 @@
 import { Link, useNavigate, useParams, createSearchParams, useSearchParams, useLocation } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
-import { Helmet } from 'react-helmet-async';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HotelCard from '@/components/HotelCard';
@@ -25,7 +24,8 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
-import { JsonLd } from 'react-schemaorg';
+import SEOMetadata from '@/components/seo/SEOMetadata';
+import { useIndexing } from '@/hooks/useIndexing';
 
 const facilityIcons = {
   Spa: Waves,
@@ -261,82 +261,54 @@ const similarHotels = useMemo(() => {
   const pageUrl = `https://luxestayhaven.com${location.pathname}`;
   const hotelImage = hotel.image;
 
+  // Auto-submit to indexing
+  useIndexing(pageUrl);
+
+  const hotelSchema = {
+    "@context": "https://schema.org",
+    "@type": "Hotel",
+    "url": pageUrl,
+    "name": hotel.name,
+    "description": hotel.description,
+    "image": hotelImage,
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": hotel.city || hotel.location,
+      "addressCountry": hotel.country || ""
+    },
+    "priceRange": `$${hotel.price}`,
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": hotel.rating,
+      "reviewCount": hotel.reviews || 0
+    },
+    "offers": {
+      "@type": "AggregateOffer",
+      "priceCurrency": "USD",
+      "lowPrice": hotel.price,
+      "highPrice": hotel.price * 1.5,
+      "offerCount": 1,
+      "offers": [
+        {
+          "@type": "Offer",
+          "url": pageUrl,
+          "priceCurrency": "USD",
+          "price": hotel.price,
+          "availability": "https://schema.org/InStock"
+        }
+      ]
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      <JsonLd
-        item={{
-          "@context": "https://schema.org",
-          "@type": "Hotel",
-          "url": pageUrl,
-          "name": hotel.name,
-          "description": hotel.description,
-          "image": hotelImage,
-          "address": {
-            "@type": "PostalAddress",
-            "addressLocality": hotel.city || hotel.location,
-            "addressCountry": hotel.country || ""
-          },
-          "priceRange": `$${hotel.price}`,
-          "aggregateRating": {
-            "@type": "AggregateRating",
-            "ratingValue": hotel.rating,
-            "reviewCount": hotel.reviews || 0
-          },
-          "offers": {
-            "@type": "AggregateOffer",
-            "priceCurrency": "USD",
-            "lowPrice": hotel.price,
-            "highPrice": hotel.price * 1.5, // Estimate high price for schema validity
-            "offerCount": 1,
-            "offers": [
-              {
-                "@type": "Offer",
-                "url": pageUrl,
-                "priceCurrency": "USD",
-                "price": hotel.price,
-                "availability": "https://schema.org/InStock"
-              }
-            ]
-          }
-        }}
+      <SEOMetadata
+        title={pageTitle}
+        description={pageDescription}
+        ogImage={hotelImage}
+        ogType="website"
+        schema={hotelSchema}
       />
-      <JsonLd
-        item={{
-          "@context": "https://schema.org",
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://luxestayhaven.com"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Hotels",
-              "item": "https://luxestayhaven.com/search"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": hotel.name,
-              "item": pageUrl
-            }
-          ]
-        }}
-      />
-      <Helmet>
-         <title>{pageTitle}</title>
-         <meta name="description" content={pageDescription} />
-         <link rel="canonical" href={pageUrl} />
-         
-         <meta property="og:title" content={pageTitle} />
-         <meta property="og:description" content={pageDescription} />
-         <meta property="og:url" content={pageUrl} />
-         <meta property="og:image" content={hotelImage} />
-         <meta property="og:type" content="website" />
-      </Helmet>
       <Header />
 
       <main className="pt-24 pb-20"> 

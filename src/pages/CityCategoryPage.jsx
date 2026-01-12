@@ -1,5 +1,5 @@
 import { useMemo, useEffect } from 'react';
-import { useParams, Link, Navigate } from 'react-router-dom';
+import { useParams, Link, Navigate, useLocation } from 'react-router-dom';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HotelCard from '@/components/HotelCard';
@@ -7,6 +7,8 @@ import { useLiteApiSearch } from '@/hooks/useLiteApiHotels';
 import { getCityBySlug } from '@/data/cities';
 import { Loader2, ArrowRight, CheckCircle } from 'lucide-react';
 import useBookingStore from '@/stores/useBookingStore';
+import SEOMetadata from '@/components/seo/SEOMetadata';
+import { useIndexing } from '@/hooks/useIndexing';
 
 const CATEGORIES = ['best', 'luxury', 'budget', 'family'];
 
@@ -59,17 +61,17 @@ const CityCategoryPage = () => {
   // Dynamic Content Generation
   const pageTitle = isValid ? `${capitalize(type)} Hotels in ${city.cityName}` : 'Hotels';
   
-  // SEO Meta Tags
-  useEffect(() => {
-    if (!isValid) return;
-    document.title = `${pageTitle} | LuxeStay`;
-    const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc) {
-      metaDesc.content = `Find the ${type} hotels in ${city.cityName}. Compare prices, read reviews, and book your stay with LuxeStay.`;
-    }
-    
-    // FAQ Schema
-    const schemaData = {
+  const location = useLocation();
+  const pageUrl = `https://luxestayhaven.com${location.pathname}`;
+  
+  // Auto-submit
+  useIndexing(pageUrl);
+
+  const pageDescription = isValid 
+    ? `Find the ${type} hotels in ${city.cityName}. Compare prices, read reviews, and book your stay with LuxeStay.` 
+    : '';
+
+  const faqSchema = {
       "@context": "https://schema.org",
       "@type": "FAQPage",
       "mainEntity": [
@@ -98,22 +100,29 @@ const CityCategoryPage = () => {
           }
         }
       ]
-    };
+  };
 
-    let script = document.querySelector('#faq-schema');
-    if (!script) {
-      script = document.createElement('script');
-      script.id = 'faq-schema';
-      script.type = "application/ld+json";
-      document.head.appendChild(script);
-    }
-    script.text = JSON.stringify(schemaData);
-
-    return () => {
-      // Cleanup
-      if (script) script.remove();
-    };
-  }, [isValid, city, type, pageTitle]);
+  const itemListSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "itemListElement": filteredHotels.slice(0, 12).map((hotel, index) => ({
+      "@type": "ListItem",
+      "position": index + 1,
+      "item": {
+        "@type": "Hotel",
+        "name": hotel.name,
+        "description": hotel.description,
+        "image": hotel.image,
+        "url": `https://luxestayhaven.com/hotel/${hotel.liteApiId || hotel.id}`,
+        "priceRange": `$${hotel.price}`,
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": hotel.rating,
+          "reviewCount": hotel.reviews || 0
+        }
+      }
+    }))
+  };
 
   if (!isValid) {
     return <Navigate to="/404" replace />;
@@ -121,6 +130,12 @@ const CityCategoryPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
+      <SEOMetadata
+        title={`${pageTitle} | LuxeStay`}
+        description={pageDescription}
+        ogType="website"
+        schema={[faqSchema, itemListSchema]}
+      />
       <Header />
       
       <main className="flex-grow container mx-auto px-4 py-8">

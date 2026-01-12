@@ -1,7 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
-import { JsonLd } from 'react-schemaorg';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HotelCard from '@/components/HotelCard';
@@ -9,6 +7,8 @@ import { useLiteApiSearch } from '@/hooks/useLiteApiHotels';
 import { getCityBySlug, cities } from '@/data/cities';
 import useBookingStore from '@/stores/useBookingStore';
 import { trackCityView } from '@/utils/analytics';
+import SEOMetadata from '@/components/seo/SEOMetadata';
+import { useIndexing } from '@/hooks/useIndexing';
 import { Loader2, MapPin, Calendar, DollarSign, ArrowRight, Filter, Trophy, ShieldCheck, CheckCircle } from 'lucide-react';
 
 const SITE_ORIGIN = 'https://luxestayhaven.com';
@@ -292,168 +292,155 @@ const DestinationPage = () => {
     setFilterRating('all');
   }, [variant, citySlug]);
 
-  return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      <JsonLd
-        item={{
-          "@context": "https://schema.org",
-          "@type": "TouristDestination",
-          "name": destinationConfig.cityName,
-          "description": stripHtml(destinationConfig.longDescription),
-          "url": pageUrl,
-          "image": destinationConfig.image,
+  // Auto-submit to indexing
+  useIndexing(pageUrl);
+
+  const touristDestinationSchema = {
+    "@context": "https://schema.org",
+    "@type": "TouristDestination",
+    "name": destinationConfig.cityName,
+    "description": stripHtml(destinationConfig.longDescription),
+    "url": pageUrl,
+    "image": destinationConfig.image,
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": destinationConfig.cityName,
+      "addressCountry": destinationConfig.country
+    }
+  };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://luxestayhaven.com"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": pageTitle,
+        "item": pageUrl
+      }
+    ]
+  };
+
+  const collectionPageSchema = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": pageTitle,
+    "description": metaDescription,
+    "url": pageUrl,
+    "mainEntity": {
+      "@type": "ItemList",
+      "itemListElement": (hotels || []).map((hotel, index) => ({
+        "@type": "ListItem",
+        "position": index + 1,
+        "item": {
+          "@type": "Hotel",
+          "name": hotel.name,
+          "description": hotel.description,
+          "image": hotel.image,
+          "url": `${SITE_ORIGIN}/hotel/${hotel.liteApiId || hotel.id}?city=${citySlug || ''}`,
           "address": {
             "@type": "PostalAddress",
             "addressLocality": destinationConfig.cityName,
             "addressCountry": destinationConfig.country
+          },
+          "priceRange": `$${hotel.price}`,
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": hotel.rating,
+            "reviewCount": hotel.reviews
           }
-        }}
-      />
-      <JsonLd
-        item={{
-          "@context": "https://schema.org",
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://luxestayhaven.com"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": pageTitle,
-              "item": pageUrl
-            }
-          ]
-        }}
-      />
-      <JsonLd
-        item={{
-          "@context": "https://schema.org",
-          "@type": "CollectionPage",
-          "name": pageTitle,
-          "description": metaDescription,
-          "url": pageUrl,
-          "mainEntity": {
-            "@type": "ItemList",
-            "itemListElement": (hotels || []).map((hotel, index) => ({
-              "@type": "ListItem",
-              "position": index + 1,
-              "item": {
-                "@type": "Hotel",
-                "name": hotel.name,
-                "description": hotel.description,
-                "image": hotel.image,
-                "url": `${SITE_ORIGIN}/hotel/${hotel.liteApiId || hotel.id}?city=${citySlug || ''}`,
-                "address": {
-                  "@type": "PostalAddress",
-                  "addressLocality": destinationConfig.cityName,
-                  "addressCountry": destinationConfig.country
-                },
-                "priceRange": `$${hotel.price}`,
-                "aggregateRating": {
-                  "@type": "AggregateRating",
-                  "ratingValue": hotel.rating,
-                  "reviewCount": hotel.reviews
-                }
-              }
-            }))
-          },
-          "hasPart": (hotels || []).map(hotel => ({
-            "@type": "Hotel",
-            "name": hotel.name,
-            "description": hotel.description,
-            "image": hotel.image,
-            "url": `${SITE_ORIGIN}/hotel/${hotel.liteApiId || hotel.id}?city=${citySlug || ''}`,
-            "address": {
-              "@type": "PostalAddress",
-              "addressLocality": destinationConfig.cityName,
-              "addressCountry": destinationConfig.country
-            },
-            "priceRange": `$${hotel.price}`,
-            "aggregateRating": {
-              "@type": "AggregateRating",
-              "ratingValue": hotel.rating,
-              "reviewCount": hotel.reviews
-            }
-          }))
-        }}
-      />
-      <JsonLd
-        item={{
-          "@context": "https://schema.org",
-          "@type": "FAQPage",
-          "mainEntity": [
-            {
-              "@type": "Question",
-              "name": `What are the best hotels in ${destinationConfig.cityName}?`,
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": `LuxeStay compares prices from multiple providers to show the best ${destinationConfig.cityName} hotels in real time.`
-              }
-            },
-            {
-              "@type": "Question",
-              "name": "Are LuxeStay prices cheaper?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "Yes, LuxeStay compares multiple booking providers to find the best available deals."
-              }
-            },
-            {
-              "@type": "Question",
-              "name": `When is the best time to book hotels in ${destinationConfig.cityName}?`,
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "For the best rates, book early for peak dates and compare multiple providers. Prices can change daily based on demand and availability."
-              }
-            }
-          ]
-        }}
-      />
-      <JsonLd
-        item={{
-          "@context": "https://schema.org",
-          "@type": "Article",
-          "headline": pageTitle,
-          "description": metaDescription,
-          "image": [destinationConfig.image],
-          "datePublished": today,
-          "dateModified": today,
-          "mainEntityOfPage": {
-            "@type": "WebPage",
-            "@id": pageUrl
-          },
-          "author": {
-            "@type": "Organization",
-            "name": "LuxeStay"
-          },
-          "publisher": {
-            "@type": "Organization",
-            "name": "LuxeStay"
-          }
-        }}
-      />
+        }
+      }))
+    },
+    "hasPart": (hotels || []).map(hotel => ({
+      "@type": "Hotel",
+      "name": hotel.name,
+      "description": hotel.description,
+      "image": hotel.image,
+      "url": `${SITE_ORIGIN}/hotel/${hotel.liteApiId || hotel.id}?city=${citySlug || ''}`,
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": destinationConfig.cityName,
+        "addressCountry": destinationConfig.country
+      },
+      "priceRange": `$${hotel.price}`,
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": hotel.rating,
+        "reviewCount": hotel.reviews
+      }
+    }))
+  };
 
-      <Helmet>
-        <title>{pageTitle}</title>
-        <meta name="description" content={metaDescription} />
-        <link rel="canonical" href={pageUrl} />
-        <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": `What are the best hotels in ${destinationConfig.cityName}?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": `LuxeStay compares prices from multiple providers to show the best ${destinationConfig.cityName} hotels in real time.`
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Are LuxeStay prices cheaper?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, LuxeStay compares multiple booking providers to find the best available deals."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": `When is the best time to book hotels in ${destinationConfig.cityName}?`,
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "For the best rates, book early for peak dates and compare multiple providers. Prices can change daily based on demand and availability."
+        }
+      }
+    ]
+  };
 
-        <meta property="og:title" content={pageTitle} />
-        <meta property="og:description" content={metaDescription} />
-        <meta property="og:url" content={pageUrl} />
-        <meta property="og:type" content="article" />
-        <meta property="og:image" content={destinationConfig.image} />
+  const articleSchema = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": pageTitle,
+    "description": metaDescription,
+    "image": [destinationConfig.image],
+    "datePublished": today,
+    "dateModified": today,
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": pageUrl
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "LuxeStay"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "LuxeStay"
+    }
+  };
 
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={pageTitle} />
-        <meta name="twitter:description" content={metaDescription} />
-        <meta name="twitter:image" content={destinationConfig.image} />
-      </Helmet>
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <SEOMetadata
+        title={pageTitle}
+        description={metaDescription}
+        ogImage={destinationConfig.image}
+        ogType="article"
+        schema={[touristDestinationSchema, breadcrumbSchema, collectionPageSchema, faqSchema, articleSchema]}
+      />
 
       <Header />      
       <main className="flex-grow container mx-auto px-4 py-8">
