@@ -20,6 +20,7 @@ import PoiLandingPage from "./pages/PoiLandingPage";
 
 const queryClient = new QueryClient();
 
+
 // Analytics wrapper to access router context
 const AnalyticsTracker = () => {
   const location = useLocation();
