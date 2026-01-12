@@ -77,6 +77,98 @@ const PoiLandingPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <JsonLd
+        item={{
+          "@context": "https://schema.org",
+          "@type": "TouristDestination",
+          "name": poiConfig.title.replace(/^Hotels Near\s+/i, ''),
+          "description": metaDescription,
+          "url": pageUrl,
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": poiConfig.destination
+          }
+        }}
+      />
+      <JsonLd
+        item={{
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Home",
+              "item": "https://luxestayhaven.com"
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": poiConfig.title,
+              "item": pageUrl
+            }
+          ]
+        }}
+      />
+      <JsonLd
+        item={{
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          "name": pageTitle,
+          "description": metaDescription,
+          "url": pageUrl,
+          "mainEntity": {
+            "@type": "ItemList",
+            "itemListElement": hotelsForCards.map((hotel, index) => ({
+              "@type": "ListItem",
+              "position": index + 1,
+              "item": {
+                "@type": "Hotel",
+                "name": hotel.name,
+                "description": hotel.description,
+                "image": hotel.image,
+                "url": `${SITE_ORIGIN}/hotel/${hotel.liteApiId || hotel.id}?city=${hotel.citySlug || ''}`,
+                "address": {
+                  "@type": "PostalAddress",
+                  "addressLocality": hotel.city || hotel.location,
+                  "addressCountry": hotel.country
+                },
+                "priceRange": `$${hotel.price}`,
+                "aggregateRating": {
+                  "@type": "AggregateRating",
+                  "ratingValue": hotel.rating,
+                  "reviewCount": hotel.reviews
+                }
+              }
+            }))
+          }
+        }}
+      />
+      <JsonLd
+        item={{
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": `What are the best hotels near ${poiConfig.title.replace(/^Hotels Near\s+/i, '')}?`,
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": `LuxeStay compares prices from multiple providers to show the best hotels near ${poiConfig.title.replace(/^Hotels Near\s+/i, '')} in real time.`
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Are LuxeStay prices cheaper?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes, LuxeStay compares multiple booking providers to find the best available deals."
+              }
+            }
+          ]
+        }}
+      />
+
       <Helmet>
         <title>{pageTitle}</title>
         <meta name="description" content={metaDescription} />
@@ -88,31 +180,6 @@ const PoiLandingPage = () => {
         <meta property="og:description" content={metaDescription} />
         <meta property="og:url" content={pageUrl} />
         <meta property="og:type" content="article" />
-
-        <script type="application/ld+json">
-          {JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            "mainEntity": [
-              {
-                "@type": "Question",
-                "name": `What are the best hotels near ${poiConfig.title.replace(/^Hotels Near\s+/i, '')}?`,
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "LuxeStay compares prices from multiple providers to show top hotels and real-time availability near your destination."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Are LuxeStay prices cheaper?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Yes, LuxeStay compares multiple booking providers to find the best available deals."
-                }
-              }
-            ]
-          })}
-        </script>
       </Helmet>
 
       <Header />

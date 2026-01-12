@@ -262,6 +262,69 @@ const similarHotels = useMemo(() => {
 
   return (
     <div className="min-h-screen bg-background">
+      <JsonLd
+        item={{
+          "@context": "https://schema.org",
+          "@type": "Hotel",
+          "url": pageUrl,
+          "name": hotel.name,
+          "description": hotel.description,
+          "image": hotelImage,
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": hotel.city || hotel.location,
+            "addressCountry": hotel.country || ""
+          },
+          "priceRange": `$${hotel.price}`,
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": hotel.rating,
+            "reviewCount": hotel.reviews || 0
+          },
+          "offers": {
+            "@type": "AggregateOffer",
+            "priceCurrency": "USD",
+            "lowPrice": hotel.price,
+            "highPrice": hotel.price * 1.5, // Estimate high price for schema validity
+            "offerCount": 1,
+            "offers": [
+              {
+                "@type": "Offer",
+                "url": pageUrl,
+                "priceCurrency": "USD",
+                "price": hotel.price,
+                "availability": "https://schema.org/InStock"
+              }
+            ]
+          }
+        }}
+      />
+      <JsonLd
+        item={{
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Home",
+              "item": "https://luxestayhaven.com"
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": "Hotels",
+              "item": "https://luxestayhaven.com/search"
+            },
+            {
+              "@type": "ListItem",
+              "position": 3,
+              "name": hotel.name,
+              "item": pageUrl
+            }
+          ]
+        }}
+      />
       <Helmet>
          <title>{pageTitle}</title>
          <meta name="description" content={pageDescription} />
@@ -272,62 +335,6 @@ const similarHotels = useMemo(() => {
          <meta property="og:url" content={pageUrl} />
          <meta property="og:image" content={hotelImage} />
          <meta property="og:type" content="website" />
-
-         {/* JSON-LD for Hotel */}
-         <script type="application/ld+json">
-           {JSON.stringify({
-             "@context": "https://schema.org",
-             "@type": "Hotel",
-             "url": pageUrl,
-             "name": hotel.name,
-             "description": hotel.description,
-             "image": hotelImage,
-             "address": {
-               "@type": "PostalAddress",
-               "addressLocality": hotel.city || hotel.location,
-               "addressCountry": hotel.country || ""
-             },
-             "priceRange": `$${hotel.price}`,
-             "aggregateRating": {
-               "@type": "AggregateRating",
-               "ratingValue": hotel.rating,
-               "reviewCount": hotel.reviews || 0
-             },
-             "offers": {
-               "@type": "Offer",
-               "url": pageUrl,
-               "priceCurrency": "USD",
-               "price": hotel.price,
-               "availability": "https://schema.org/InStock"
-             }
-           })}
-         </script>
-         <script type="application/ld+json">
-            {JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "BreadcrumbList",
-              "itemListElement": [
-                {
-                  "@type": "ListItem",
-                  "position": 1,
-                  "name": "Home",
-                  "item": "https://luxestayhaven.com"
-                },
-                {
-                  "@type": "ListItem",
-                  "position": 2,
-                  "name": "Hotels",
-                  "item": "https://luxestayhaven.com/search"
-                },
-                {
-                  "@type": "ListItem",
-                  "position": 3,
-                  "name": hotel.name,
-                  "item": pageUrl
-                }
-              ]
-            })}
-          </script>
       </Helmet>
       <Header />
 
