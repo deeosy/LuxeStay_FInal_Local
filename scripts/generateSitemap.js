@@ -89,7 +89,7 @@ ${urls.map(u => `
   const testUrls = newUrls.length > 0 ? newUrls : [DOMAIN]; 
 
   try {
-    const res = await fetch(`${DOMAIN}/api/submit-to-google`, {
+    const res = await fetch(`${DOMAIN}/.netlify/functions/submit-to-google`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${googleAdminToken}`,
@@ -114,7 +114,7 @@ ${urls.map(u => `
   // console.log("Submitting to Google Indexing API...");
 
   // try {
-  //   const res = await fetch(`${DOMAIN}/api/submit-to-google`, {
+  // const res = await fetch(`${DOMAIN}/.netlify/functions/submit-to-google`, {
   //     method: "POST",
   //     headers: {
   //       Authorization: `Bearer ${googleAdminToken}`,
