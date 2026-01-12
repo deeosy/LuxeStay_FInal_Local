@@ -2,3 +2,9 @@ project_id = "cyopwkfinqpsnnpqmmkb"
 
 [functions.liteapi]
 verify_jwt = false
+
+[functions.googleIndexing]
+verify_jwt = false
+
+[functions.submit-to-google]
+verify_jwt = false

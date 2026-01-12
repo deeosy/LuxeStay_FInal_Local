@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 import DestinationPage from "./pages/DestinationPage";
 import Destinations from "./pages/Destinations";
 import CityCategoryPage from "./pages/CityCategoryPage";
+import PoiLandingPage from "./pages/PoiLandingPage";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
       <TooltipProvider>
         <Helmet>
           <meta name="google-site-verification" content="V7hMVeeewDdVS_fCmeVY7VIi___MzYDAttHj9zodV48" />
+          <meta name="msvalidate.01" content={import.meta.env.VITE_BING_MSVALIDATE_01} />
         </Helmet>
         <Toaster />
         <Sonner />
@@ -50,6 +52,12 @@ const App = () => (
             <Route path="/search" element={<SearchResults />} />
             <Route path="/destinations" element={<Destinations />} />
             <Route path="/hotels-in/:citySlug" element={<DestinationPage />} />
+            <Route path="/hotels-in-:citySlug" element={<DestinationPage />} />
+            <Route path="/best-hotels-in-:citySlug" element={<DestinationPage />} />
+            <Route path="/cheap-hotels-in-:citySlug" element={<DestinationPage />} />
+            <Route path="/luxury-hotels-in-:citySlug" element={<DestinationPage />} />
+            <Route path="/family-hotels-in-:citySlug" element={<DestinationPage />} />
+            <Route path="/hotels-near-:poiSlug" element={<PoiLandingPage />} />
             <Route path="/hotels-in/:citySlug/:type" element={<CityCategoryPage />} />
             <Route path="/hotel/:id" element={<HotelDetail />} />
             <Route path="/checkout" element={<Checkout />} />

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { Link, useParams, Navigate } from 'react-router-dom';
+import { Link, useParams, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -10,21 +10,79 @@ import useBookingStore from '@/stores/useBookingStore';
 import { trackCityView } from '@/utils/analytics';
 import { Loader2, MapPin, Calendar, DollarSign, ArrowRight, Filter, Trophy, ShieldCheck, CheckCircle } from 'lucide-react';
 
+const SITE_ORIGIN = 'https://luxestayhaven.com';
+
+const titleCaseFromSlug = (slug) => {
+  return (slug || '')
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+};
+
+const getCityPageVariant = (pathname) => {
+  if (!pathname) return 'default';
+  if (pathname.startsWith('/best-hotels-in-')) return 'best';
+  if (pathname.startsWith('/cheap-hotels-in-')) return 'cheap';
+  if (pathname.startsWith('/luxury-hotels-in-')) return 'luxury';
+  if (pathname.startsWith('/family-hotels-in-')) return 'family';
+  return 'default';
+};
+
+const getCityPageTitle = ({ variant, cityName }) => {
+  if (variant === 'best') return `Best Hotels in ${cityName} (2026) — Compare Prices`;
+  if (variant === 'cheap') return `Cheap Hotels in ${cityName} (2026) — Compare Budget Deals`;
+  if (variant === 'luxury') return `Luxury Hotels in ${cityName} (2026) — Compare 5-Star Stays`;
+  if (variant === 'family') return `Family Hotels in ${cityName} (2026) — Kid-Friendly Stays`;
+  return `Best Hotels in ${cityName} (2026) — Compare Prices`;
+};
+
+const getCityPageDescription = ({ variant, cityName }) => {
+  if (variant === 'best') {
+    return `Compare the best hotels in ${cityName} with real-time availability. LuxeStay shows top stays, prices, and deals across multiple providers.`;
+  }
+  if (variant === 'cheap') {
+    return `Find cheap hotels in ${cityName} with real-time availability and deals. LuxeStay compares prices across providers so you can book the best budget stay.`;
+  }
+  if (variant === 'luxury') {
+    return `Discover luxury hotels in ${cityName} with premium amenities and top ratings. LuxeStay compares prices across providers to help you book the best 5-star stay.`;
+  }
+  if (variant === 'family') {
+    return `Book family hotels in ${cityName} with great locations and amenities. LuxeStay compares prices across providers to help you find kid-friendly stays and deals.`;
+  }
+  return `Compare hotels in ${cityName} with real-time availability. LuxeStay shows top stays, prices, and deals across multiple providers.`;
+};
+
 
 const DestinationPage = () => {
   const { citySlug } = useParams();
-  const destinationConfig = getCityBySlug(citySlug);
+  const location = useLocation();
+  const variant = getCityPageVariant(location.pathname);
+
+  const knownCity = getCityBySlug(citySlug);
+  const resolvedCityName = knownCity?.cityName || titleCaseFromSlug(citySlug);
+  const destinationConfig = knownCity || {
+    citySlug,
+    cityName: resolvedCityName,
+    country: '',
+    liteApiLocationId: null,
+    query: resolvedCityName,
+    title: `${resolvedCityName} Hotels - LuxeStay`,
+    description: '',
+    shortIntro: `Compare hotels in ${resolvedCityName} with real-time availability and deals.`,
+    longDescription: `<p>LuxeStay helps you compare hotel prices in ${resolvedCityName} from multiple providers in real time.</p><p>Browse top-rated stays, filter by price and rating, and book through our trusted partners.</p>`,
+    travelTags: ['Hotels', 'Deals', 'Compare Prices'],
+    bestAreas: null,
+    bestTimeToVisit: null,
+    averageHotelPrice: null,
+    image: '/placeholder.svg',
+  };
 
   useEffect(() => {
     if (destinationConfig) {
       trackCityView(destinationConfig.cityName);
     }
   }, [destinationConfig]);
-
-  // Redirect to 404 if destination not found
-  if (!destinationConfig) {
-    return <Navigate to="/404" replace />;
-  }
 
   const [filterPrice, setFilterPrice] = useState('all');
   const [filterRating, setFilterRating] = useState('all');
@@ -59,6 +117,13 @@ const DestinationPage = () => {
       if (filterType === 'boutique' && (hotel.rating < 4.0 || hotel.price > 250)) return false;
       if (filterType === 'business' && hotel.rating < 3.5) return false;
       if (filterType === 'resort' && !hotel.name.toLowerCase().includes('resort')) return false;
+      if (filterType === 'family') {
+        const amenities = Array.isArray(hotel.amenities) ? hotel.amenities.map((a) => String(a).toLowerCase()) : [];
+        const name = String(hotel.name || '').toLowerCase();
+        const familySignals = ['family', 'kids', 'kid', 'children', 'child', 'suite', 'connecting'];
+        const hasSignal = familySignals.some((s) => name.includes(s) || amenities.some((a) => a.includes(s)));
+        if (!hasSignal && hotel.rating < 4.0) return false;
+      }
 
       return true;
     });
@@ -86,35 +151,60 @@ const DestinationPage = () => {
     return tmp.textContent || tmp.innerText || "";
   };
 
-  const metaDescription = destinationConfig 
-    ? `${destinationConfig.shortIntro} ${stripHtml(destinationConfig.longDescription)}`.substring(0, 160) + '...'
-    : '';
+  const pageTitle = getCityPageTitle({ variant, cityName: destinationConfig.cityName });
+  const metaDescription = getCityPageDescription({ variant, cityName: destinationConfig.cityName }).substring(0, 160);
+  const pageUrl = `${SITE_ORIGIN}${location.pathname}`;
+  const today = new Date().toISOString().split('T')[0];
 
-  const pageUrl = `https://luxestayhaven.com/hotels-in/${citySlug}`;
-  const pageTitle = `Hotels in ${destinationConfig.cityName} – Best Deals & Discounts | LuxeStay`;
+  useEffect(() => {
+    if (variant === 'cheap') {
+      setFilterPrice('low');
+      setFilterType('all');
+      setFilterRating('all');
+      return;
+    }
+    if (variant === 'best') {
+      setFilterPrice('all');
+      setFilterType('all');
+      setFilterRating('all');
+      return;
+    }
+    if (variant === 'luxury') {
+      setFilterPrice('high');
+      setFilterType('luxury');
+      setFilterRating('4');
+      return;
+    }
+    if (variant === 'family') {
+      setFilterPrice('all');
+      setFilterType('family');
+      setFilterRating('4');
+      return;
+    }
+    setFilterPrice('all');
+    setFilterType('all');
+    setFilterRating('all');
+  }, [variant, citySlug]);
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Helmet>
-        {/* Core SEO */}
         <title>{pageTitle}</title>
         <meta name="description" content={metaDescription} />
         <link rel="canonical" href={pageUrl} />
+        <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
 
-        {/* Open Graph */}
         <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={metaDescription} />
         <meta property="og:url" content={pageUrl} />
-        <meta property="og:type" content="website" />
+        <meta property="og:type" content="article" />
         <meta property="og:image" content={destinationConfig.image} />
 
-        {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={pageTitle} />
         <meta name="twitter:description" content={metaDescription} />
         <meta name="twitter:image" content={destinationConfig.image} />
 
-        {/* JSON-LD: TouristDestination */}
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
@@ -131,7 +221,6 @@ const DestinationPage = () => {
           })}
         </script>
 
-        {/* JSON-LD: Breadcrumb */}
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
@@ -146,14 +235,13 @@ const DestinationPage = () => {
               {
                 "@type": "ListItem",
                 "position": 2,
-                "name": `Hotels in ${destinationConfig.cityName}`,
+                "name": pageTitle,
                 "item": pageUrl
               }
             ]
           })}
         </script>
 
-        {/* JSON-LD: SearchResultsPage */}
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
@@ -184,6 +272,63 @@ const DestinationPage = () => {
             }
           })}
         </script>
+
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": `What are the best hotels in ${destinationConfig.cityName}?`,
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": `LuxeStay compares prices from multiple providers to show the best ${destinationConfig.cityName} hotels in real time.`
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Are LuxeStay prices cheaper?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes, LuxeStay compares multiple booking providers to find the best available deals."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": `When is the best time to book hotels in ${destinationConfig.cityName}?`,
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "For the best rates, book early for peak dates and compare multiple providers. Prices can change daily based on demand and availability."
+                }
+              }
+            ]
+          })}
+        </script>
+
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": pageTitle,
+            "description": metaDescription,
+            "image": [destinationConfig.image],
+            "datePublished": today,
+            "dateModified": today,
+            "mainEntityOfPage": {
+              "@type": "WebPage",
+              "@id": pageUrl
+            },
+            "author": {
+              "@type": "Organization",
+              "name": "LuxeStay"
+            },
+            "publisher": {
+              "@type": "Organization",
+              "name": "LuxeStay"
+            }
+          })}
+        </script>
       </Helmet>
 
       <Header />      
@@ -202,7 +347,7 @@ const DestinationPage = () => {
           )}
 
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-            {destinationConfig.title.split(' - ')[0] || `Hotels in ${destinationConfig.cityName}`}
+            {pageTitle}
           </h1>
           
           {destinationConfig.shortIntro && (
@@ -288,6 +433,27 @@ const DestinationPage = () => {
                 <span className="font-semibold text-gray-900 group-hover:text-primary">{cat.label}</span>
               </Link>
             ))}
+          </div>
+
+          <div className="mt-8 flex flex-wrap gap-3 justify-center">
+            <Link to={`/best-hotels-in-${citySlug}`} className="px-4 py-2 bg-white rounded-full border border-gray-200 text-sm hover:border-primary/30 hover:text-primary transition-colors">
+              Best Hotels in {destinationConfig.cityName}
+            </Link>
+            <Link to={`/cheap-hotels-in-${citySlug}`} className="px-4 py-2 bg-white rounded-full border border-gray-200 text-sm hover:border-primary/30 hover:text-primary transition-colors">
+              Cheap Hotels in {destinationConfig.cityName}
+            </Link>
+            <Link to={`/luxury-hotels-in-${citySlug}`} className="px-4 py-2 bg-white rounded-full border border-gray-200 text-sm hover:border-primary/30 hover:text-primary transition-colors">
+              Luxury Hotels in {destinationConfig.cityName}
+            </Link>
+            <Link to={`/family-hotels-in-${citySlug}`} className="px-4 py-2 bg-white rounded-full border border-gray-200 text-sm hover:border-primary/30 hover:text-primary transition-colors">
+              Family Hotels in {destinationConfig.cityName}
+            </Link>
+            <Link to={`/hotels-near-eiffel-tower`} className="px-4 py-2 bg-white rounded-full border border-gray-200 text-sm hover:border-primary/30 hover:text-primary transition-colors">
+              Hotels Near Eiffel Tower
+            </Link>
+            <Link to={`/hotels-near-jfk`} className="px-4 py-2 bg-white rounded-full border border-gray-200 text-sm hover:border-primary/30 hover:text-primary transition-colors">
+              Hotels Near JFK
+            </Link>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams, createSearchParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, createSearchParams, useSearchParams, useLocation } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import Header from '@/components/layout/Header';
@@ -57,6 +57,7 @@ const HotelDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const isDebug = searchParams.get('debug') === 'true';
   
   // Read booking state from global store
@@ -256,7 +257,7 @@ const similarHotels = useMemo(() => {
   const pageDescription = hotel.description 
     ? hotel.description.substring(0, 160) 
     : `Book your stay at ${hotel.name} in ${hotel.city || hotel.location}. Best rates guaranteed.`;
-  const pageUrl = `https://luxestayhaven.com/hotel/${hotel.liteApiId || hotel.id}`;
+  const pageUrl = `https://luxestayhaven.com${location.pathname}`;
   const hotelImage = hotel.image;
 
   return (
@@ -277,6 +278,7 @@ const similarHotels = useMemo(() => {
            {JSON.stringify({
              "@context": "https://schema.org",
              "@type": "Hotel",
+             "url": pageUrl,
              "name": hotel.name,
              "description": hotel.description,
              "image": hotelImage,
@@ -293,6 +295,7 @@ const similarHotels = useMemo(() => {
              },
              "offers": {
                "@type": "Offer",
+               "url": pageUrl,
                "priceCurrency": "USD",
                "price": hotel.price,
                "availability": "https://schema.org/InStock"

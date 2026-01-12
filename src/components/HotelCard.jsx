@@ -38,7 +38,9 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
             const params = urlObj.searchParams;
             console.log('--- URL Params ---');
             console.log('Full Params:', Object.fromEntries(params.entries()));
-          } catch(err) {}
+          } catch (err) {
+            if (isDebug) console.error(err);
+          }
           console.groupEnd();
 
           if (window.confirm('DEBUG MODE: Redirecting to affiliate (HotelCard). Proceed?')) {

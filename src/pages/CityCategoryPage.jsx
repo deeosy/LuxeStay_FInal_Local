@@ -15,28 +15,24 @@ const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const CityCategoryPage = () => {
   const { citySlug, type } = useParams();
   const city = getCityBySlug(citySlug);
+  const isValid = !!city && CATEGORIES.includes(type);
   
-  // Validation
-  if (!city || !CATEGORIES.includes(type)) {
-    return <Navigate to="/404" replace />;
-  }
-
   const { checkIn, checkOut, guests, rooms } = useBookingStore();
 
   const { hotels, loading, error } = useLiteApiSearch({
-    destination: city.query,
-    locationId: city.liteApiLocationId,
+    destination: city?.query,
+    locationId: city?.liteApiLocationId,
     checkIn,
     checkOut,
     guests,
     rooms,
-    enabled: true
+    enabled: isValid
   });
 
   const filteredHotels = useMemo(() => {
     if (!hotels) return [];
     
-    let filtered = [...hotels];
+    const filtered = [...hotels];
 
     switch (type) {
       case 'best':
@@ -61,10 +57,11 @@ const CityCategoryPage = () => {
   }, [hotels, type]);
 
   // Dynamic Content Generation
-  const pageTitle = `${capitalize(type)} Hotels in ${city.cityName}`;
+  const pageTitle = isValid ? `${capitalize(type)} Hotels in ${city.cityName}` : 'Hotels';
   
   // SEO Meta Tags
   useEffect(() => {
+    if (!isValid) return;
     document.title = `${pageTitle} | LuxeStay`;
     const metaDesc = document.querySelector('meta[name="description"]');
     if (metaDesc) {
@@ -116,7 +113,11 @@ const CityCategoryPage = () => {
       // Cleanup
       if (script) script.remove();
     };
-  }, [city, type, pageTitle]);
+  }, [isValid, city, type, pageTitle]);
+
+  if (!isValid) {
+    return <Navigate to="/404" replace />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
