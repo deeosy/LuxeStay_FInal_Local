@@ -193,7 +193,7 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
         <div className="mt-4 pt-3 border-t border-border">
           {hotel.bookingUrl ? (
             <a 
-              href={hotel.bookingUrl}
+              href={`/go/hotel/${hotel.liteApiId || hotel.id}`} rel="nofollow sponsored"
               className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors text-sm"
             >
               View Deal

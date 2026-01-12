@@ -17,7 +17,11 @@ export const cities = [
       "Montmartre - Best for artistic vibes and views"
     ],
     bestTimeToVisit: "The best time to visit Paris is from April to June or October to November when the weather is mild and the crowds are smaller. Winter offers a magical atmosphere with holiday lights.",
-    averageHotelPrice: "$250 - $800 per night"
+    averageHotelPrice: "$250 - $800 per night",
+    airportCodes: ["CDG", "ORY", "BVA"],
+    nearbyCities: ["london", "brussels", "amsterdam"],
+    popularDistricts: ["le-marais", "montmartre", "saint-germain", "champs-elysees", "latin-quarter"],
+    travelIntentTags: ["romantic", "luxury", "shopping", "culture", "foodie"]
   },
   {
     citySlug: "london",
@@ -37,7 +41,11 @@ export const cities = [
       "Shoreditch - Best for street art and hip cafes"
     ],
     bestTimeToVisit: "Late spring (March to May) and early autumn (September to October) are ideal. Summer brings festivals but larger crowds.",
-    averageHotelPrice: "$200 - $700 per night"
+    averageHotelPrice: "$200 - $700 per night",
+    airportCodes: ["LHR", "LGW", "STN", "LCY"],
+    nearbyCities: ["paris", "edinburgh", "dublin"],
+    popularDistricts: ["mayfair", "soho", "kensington", "shoreditch", "covent-garden"],
+    travelIntentTags: ["business", "family", "history", "luxury", "nightlife"]
   },
   {
     citySlug: "new-york",
@@ -57,7 +65,11 @@ export const cities = [
       "Upper East Side - Best for museums and luxury shopping"
     ],
     bestTimeToVisit: "Fall (September to November) and Spring (April to June) offer pleasant weather. December is magical for holiday decorations.",
-    averageHotelPrice: "$300 - $900 per night"
+    averageHotelPrice: "$300 - $900 per night",
+    airportCodes: ["JFK", "LGA", "EWR"],
+    nearbyCities: ["boston", "philadelphia", "washington-dc"],
+    popularDistricts: ["manhattan", "brooklyn", "queens", "soho", "tribeca"],
+    travelIntentTags: ["business", "luxury", "shopping", "nightlife", "sightseeing"]
   },
   {
     citySlug: "dubai",
@@ -77,7 +89,11 @@ export const cities = [
       "Jumeirah Beach Residence (JBR) - Best for beach and walk"
     ],
     bestTimeToVisit: "November to March is the best time to visit Dubai to enjoy cooler, pleasant weather perfect for outdoor activities.",
-    averageHotelPrice: "$150 - $600 per night"
+    averageHotelPrice: "$150 - $600 per night",
+    airportCodes: ["DXB", "DWC"],
+    nearbyCities: ["abu-dhabi", "muscat"],
+    popularDistricts: ["downtown", "marina", "palm-jumeirah", "jbr", "deira"],
+    travelIntentTags: ["luxury", "beach", "shopping", "family", "adventure"]
   }
 ];
 

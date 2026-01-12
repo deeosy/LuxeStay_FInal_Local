@@ -17,6 +17,8 @@ const titleCaseFromSlug = (slug) => {
     .join(' ');
 };
 
+import { cities } from '@/data/cities';
+
 const POI_MAP = {
   jfk: {
     title: 'Hotels Near JFK Airport',
@@ -38,8 +40,29 @@ const PoiLandingPage = () => {
 
   const poiConfig = useMemo(() => {
     if (!poiSlug) return null;
+    
+    // Check static map first
     const mapped = POI_MAP[poiSlug];
     if (mapped) return mapped;
+    
+    // Check if it looks like an airport code
+    // Pattern: xxx-airport or just xxx (if 3 letters)
+    // The route is /hotels-near-:poiSlug.
+    // If user goes to /hotels-near-dxb-airport, slug is dxb-airport.
+    // Extract code.
+    const airportMatch = poiSlug.match(/^([a-z]{3})-airport$/i);
+    if (airportMatch) {
+       const code = airportMatch[1].toUpperCase();
+       // Find city with this airport
+       const city = cities.find(c => c.airportCodes && c.airportCodes.includes(code));
+       if (city) {
+          return {
+             title: `Hotels Near ${code} Airport`,
+             destination: `${code} Airport, ${city.cityName}`,
+             citySlug: city.citySlug
+          };
+       }
+    }
 
     const name = titleCaseFromSlug(poiSlug);
     return {

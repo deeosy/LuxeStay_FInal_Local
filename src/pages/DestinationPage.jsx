@@ -23,22 +23,26 @@ const titleCaseFromSlug = (slug) => {
 
 const getCityPageVariant = (pathname) => {
   if (!pathname) return 'default';
+  if (pathname.includes('/hotels-near-') && pathname.includes('-from-')) return 'nearby-from';
   if (pathname.startsWith('/best-hotels-in-')) return 'best';
   if (pathname.startsWith('/cheap-hotels-in-')) return 'cheap';
   if (pathname.startsWith('/luxury-hotels-in-')) return 'luxury';
   if (pathname.startsWith('/family-hotels-in-')) return 'family';
+  if (pathname.startsWith('/hotels-in-') && pathname.split('-').length > 3) return 'district'; // Heuristic: hotels-in-paris-marais
   return 'default';
 };
 
-const getCityPageTitle = ({ variant, cityName }) => {
+const getCityPageTitle = ({ variant, cityName, districtName, nearbyCityName, originCityName }) => {
   if (variant === 'best') return `Best Hotels in ${cityName} (2026) — Compare Prices`;
   if (variant === 'cheap') return `Cheap Hotels in ${cityName} (2026) — Compare Budget Deals`;
   if (variant === 'luxury') return `Luxury Hotels in ${cityName} (2026) — Compare 5-Star Stays`;
   if (variant === 'family') return `Family Hotels in ${cityName} (2026) — Kid-Friendly Stays`;
+  if (variant === 'district' && districtName) return `Hotels in ${cityName} ${districtName} (2026) — Best Rates`;
+  if (variant === 'nearby-from' && nearbyCityName && originCityName) return `Hotels near ${nearbyCityName} from ${originCityName} (2026)`;
   return `Best Hotels in ${cityName} (2026) — Compare Prices`;
 };
 
-const getCityPageDescription = ({ variant, cityName }) => {
+const getCityPageDescription = ({ variant, cityName, districtName, nearbyCityName, originCityName }) => {
   if (variant === 'best') {
     return `Compare the best hotels in ${cityName} with real-time availability. LuxeStay shows top stays, prices, and deals across multiple providers.`;
   }
@@ -51,23 +55,104 @@ const getCityPageDescription = ({ variant, cityName }) => {
   if (variant === 'family') {
     return `Book family hotels in ${cityName} with great locations and amenities. LuxeStay compares prices across providers to help you find kid-friendly stays and deals.`;
   }
+  if (variant === 'district' && districtName) {
+    return `Find the best hotels in ${cityName} ${districtName}. Compare prices, read reviews, and book your stay in this popular district with LuxeStay.`;
+  }
+  if (variant === 'nearby-from' && nearbyCityName && originCityName) {
+    return `Planning a trip from ${originCityName} to ${nearbyCityName}? Find the best hotels near ${nearbyCityName} with real-time availability and deals.`;
+  }
   return `Compare hotels in ${cityName} with real-time availability. LuxeStay shows top stays, prices, and deals across multiple providers.`;
 };
 
 
 const DestinationPage = () => {
-  const { citySlug } = useParams();
+  const { citySlug, districtSlug, nearbyCitySlug, type } = useParams();
   const location = useLocation();
   const variant = getCityPageVariant(location.pathname);
 
-  const knownCity = getCityBySlug(citySlug);
-  const resolvedCityName = knownCity?.cityName || titleCaseFromSlug(citySlug);
-  const destinationConfig = knownCity || {
+  // Resolution Logic
+  let resolvedCitySlug = citySlug;
+  let resolvedDistrictSlug = districtSlug;
+  let resolvedNearbyCitySlug = nearbyCitySlug; // For "nearby-from" route, the first param is nearbyCitySlug? No, route is /hotels-near-:nearbyCitySlug-from-:citySlug
+  // Wait, in /hotels-near-:nearbyCitySlug-from-:citySlug, the params are nearbyCitySlug and citySlug.
+  // In /hotels-in-:citySlug-:districtSlug, we might need manual parsing if react-router doesn't split it perfectly.
+  // Actually, I defined /hotels-in-:citySlug-:districtSlug. But citySlug can be multi-word?
+  // If citySlug is "new-york", and district is "manhattan", url is "hotels-in-new-york-manhattan".
+  // React Router will match :citySlug as "new-york-manhattan" if I am not careful, unless I have a separator?
+  // No, the route was /hotels-in-:citySlug-:districtSlug. React router parses segments. But there are no slashes.
+  // So "new-york-manhattan" is one segment.
+  // Route /hotels-in-:citySlug will match "new-york-manhattan".
+  // So I need to handle splitting INSIDE the component if I use one generic route or rely on specific order.
+  // Actually, I added Route /hotels-in-:citySlug-:districtSlug. This is NOT valid react router syntax for a single segment.
+  // React router parameters must be separated by characters that are not in the param.
+  // If I use /hotels-in-:citySlug-:districtSlug, it expects a literal hyphen.
+  // But citySlug can have hyphens. "new-york".
+  // So "hotels-in-new-york-manhattan".
+  // citySlug="new", districtSlug="york-manhattan"? Or citySlug="new-york", districtSlug="manhattan"?
+  // It's ambiguous.
+  // Better approach: Route /hotels-in-:complexSlug
+  // Then parse complexSlug.
+  
+  // Let's rely on the fact that I know valid cities.
+  const allCities = cities; // imported from data
+  
+  let targetCity = null;
+  let targetDistrict = null;
+  let targetNearbyCity = null;
+  let targetOriginCity = null;
+
+  // Handle "nearby-from" logic
+  if (variant === 'nearby-from') {
+     // Params should be populated if route matched /hotels-near-:nearbyCitySlug-from-:citySlug
+     // Check if params exist
+     const match = location.pathname.match(/\/hotels-near-(.+)-from-(.+)/);
+     if (match) {
+        resolvedNearbyCitySlug = match[1];
+        resolvedCitySlug = match[2];
+        targetNearbyCity = getCityBySlug(resolvedNearbyCitySlug);
+        targetOriginCity = getCityBySlug(resolvedCitySlug);
+        // The main destination is the nearby city (where we want hotels)
+        targetCity = targetNearbyCity; 
+     }
+  } else if (variant === 'district') {
+      // Try to match the slug against known cities
+      // The slug comes from :citySlug in /hotels-in-:citySlug (if caught by generic)
+      // OR I need to manually parse location.pathname
+      const slugFromPath = location.pathname.replace('/hotels-in-', '');
+      
+      // Sort cities by slug length descending to match longest possible city name first
+      // This prevents "saint-louis" being matched as "saint" if both exist
+      const sortedCities = [...allCities].sort((a, b) => b.citySlug.length - a.citySlug.length);
+      
+      // Find a city that matches the start of the slug
+      targetCity = sortedCities.find(c => slugFromPath.startsWith(c.citySlug));
+      
+      if (targetCity) {
+         // Extract district
+         const districtPart = slugFromPath.replace(targetCity.citySlug, '').replace(/^-/, '');
+         if (districtPart) {
+             targetDistrict = districtPart;
+         }
+      }
+  } else {
+      // Standard cases
+      targetCity = getCityBySlug(citySlug);
+  }
+  
+  // Fallback if targetCity is not found (maybe generic "hotels-in-paris" matched)
+  if (!targetCity && citySlug) {
+      targetCity = getCityBySlug(citySlug);
+  }
+
+  const resolvedCityName = targetCity?.cityName || titleCaseFromSlug(citySlug);
+  const resolvedDistrictName = targetDistrict ? titleCaseFromSlug(targetDistrict) : null;
+  
+  const destinationConfig = targetCity || {
     citySlug,
     cityName: resolvedCityName,
     country: '',
     liteApiLocationId: null,
-    query: resolvedCityName,
+    query: resolvedCityName, // Fallback query
     title: `${resolvedCityName} Hotels - LuxeStay`,
     description: '',
     shortIntro: `Compare hotels in ${resolvedCityName} with real-time availability and deals.`,
@@ -78,6 +163,13 @@ const DestinationPage = () => {
     averageHotelPrice: null,
     image: '/placeholder.svg',
   };
+
+  // If district, append to query
+  if (targetDistrict) {
+      destinationConfig.query = `${resolvedDistrictName}, ${destinationConfig.cityName}`;
+  }
+  
+  // If nearby-from, query is the nearby city (already set by targetCity = targetNearbyCity)
 
   useEffect(() => {
     if (destinationConfig) {
@@ -152,8 +244,21 @@ const DestinationPage = () => {
     return tmp.textContent || tmp.innerText || "";
   };
 
-  const pageTitle = getCityPageTitle({ variant, cityName: destinationConfig.cityName });
-  const metaDescription = getCityPageDescription({ variant, cityName: destinationConfig.cityName }).substring(0, 160);
+  const pageTitle = getCityPageTitle({ 
+    variant, 
+    cityName: destinationConfig.cityName,
+    districtName: resolvedDistrictName,
+    nearbyCityName: targetNearbyCity?.cityName,
+    originCityName: targetOriginCity?.cityName
+  });
+  
+  const metaDescription = getCityPageDescription({ 
+    variant, 
+    cityName: destinationConfig.cityName,
+    districtName: resolvedDistrictName,
+    nearbyCityName: targetNearbyCity?.cityName,
+    originCityName: targetOriginCity?.cityName
+  }).substring(0, 160);
   const pageUrl = `${SITE_ORIGIN}${location.pathname}`;
   const today = new Date().toISOString().split('T')[0];
 

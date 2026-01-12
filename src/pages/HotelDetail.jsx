@@ -25,6 +25,7 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
+import { JsonLd } from 'react-schemaorg';
 
 const facilityIcons = {
   Spa: Waves,

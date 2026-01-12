@@ -54,10 +54,12 @@ const App = () => (
             <Route path="/destinations" element={<Destinations />} />
             <Route path="/hotels-in/:citySlug" element={<DestinationPage />} />
             <Route path="/hotels-in-:citySlug" element={<DestinationPage />} />
+            <Route path="/hotels-in-:citySlug-:districtSlug" element={<DestinationPage />} />
             <Route path="/best-hotels-in-:citySlug" element={<DestinationPage />} />
             <Route path="/cheap-hotels-in-:citySlug" element={<DestinationPage />} />
             <Route path="/luxury-hotels-in-:citySlug" element={<DestinationPage />} />
             <Route path="/family-hotels-in-:citySlug" element={<DestinationPage />} />
+            <Route path="/hotels-near-:nearbyCitySlug-from-:citySlug" element={<DestinationPage />} />
             <Route path="/hotels-near-:poiSlug" element={<PoiLandingPage />} />
             <Route path="/hotels-in/:citySlug/:type" element={<CityCategoryPage />} />
             <Route path="/hotel/:id" element={<HotelDetail />} />
