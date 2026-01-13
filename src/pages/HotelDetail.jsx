@@ -59,6 +59,11 @@ const HotelDetail = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const location = useLocation();
+
+  const pageUrl = `https://luxestayhaven.com${location.pathname}`;
+  // Auto-submit to indexing
+  useIndexing(pageUrl);
+
   const isDebug = searchParams.get('debug') === 'true';
   
   // Read booking state from global store
@@ -258,11 +263,8 @@ const similarHotels = useMemo(() => {
   const pageDescription = hotel.description 
     ? hotel.description.substring(0, 160) 
     : `Book your stay at ${hotel.name} in ${hotel.city || hotel.location}. Best rates guaranteed.`;
-  const pageUrl = `https://luxestayhaven.com${location.pathname}`;
-  const hotelImage = hotel.image;
 
-  // Auto-submit to indexing
-  useIndexing(pageUrl);
+  const hotelImage = hotel.image;
 
   const hotelSchema = {
     "@context": "https://schema.org",
