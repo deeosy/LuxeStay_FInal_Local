@@ -1,10 +1,10 @@
 import { Link, useSearchParams, useLocation } from 'react-router-dom';
-import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, ExternalLink } from 'lucide-react';
+import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, ExternalLink, Flame, DollarSign, Timer } from 'lucide-react';
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { trackAffiliateRedirect } from '@/utils/analytics';
 
 
-const HotelCard = ({ hotel, variant = 'default' }) => {
+const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const isDebug = searchParams.get('debug') === 'true';
@@ -18,14 +18,26 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
 
   // Construct Affiliate Link with Tracking Params
   const currentPath = location.pathname + location.search;
+  const checkIn = searchParams.get('checkIn');
+  const checkOut = searchParams.get('checkOut');
+  const guests = searchParams.get('guests');
+
   const affiliateParams = new URLSearchParams({
       city: seoCity || hotel.city || '',
       hotel: hotel.name || '',
       price: hotel.price ? hotel.price.toString() : '',
-      page: currentPath
+      page: currentPath,
+      checkIn: checkIn || '',
+      checkOut: checkOut || '',
+      guests: guests || ''
   }).toString();
   
   const affiliateLink = `/go/hotel/${hotelId}?${affiliateParams}`;
+
+  // Conversion Badges
+  const isHighDemand = (hotel.rating || 0) >= 4.6;
+  const isBestValue = cityAverage && hotel.price && hotel.price < cityAverage;
+  const isLimitedRooms = cityAverage && hotel.price && hotel.price < (cityAverage * 0.8);
 
   const favorited = isFavorite(hotelId);
 
@@ -136,6 +148,22 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
           alt={hotel.name}
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
+        <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
+          {isHighDemand && (
+            <div className="flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
+              <Flame className="w-3 h-3" /> High Demand
+            </div>
+          )}
+          {isLimitedRooms ? (
+             <div className="flex items-center gap-1 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
+              <Timer className="w-3 h-3" /> Limited Rooms
+            </div>
+          ) : isBestValue && (
+            <div className="flex items-center gap-1 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
+              <DollarSign className="w-3 h-3" /> Best Value
+            </div>
+          )}
+        </div>
         <div className="absolute top-4 right-4 flex items-center gap-2">
           <button
             onClick={handleFavoriteClick}
@@ -205,7 +233,7 @@ const HotelCard = ({ hotel, variant = 'default' }) => {
         <div className="mt-4 pt-3 border-t border-border">
           {hotel.bookingUrl ? (
             <a 
-              href={`/go/hotel/${hotel.liteApiId || hotel.id}`} rel="nofollow sponsored"
+              href={affiliateLink} rel="nofollow sponsored"
               className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors text-sm"
             >
               View Deal

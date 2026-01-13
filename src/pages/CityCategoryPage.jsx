@@ -168,7 +168,7 @@ const CityCategoryPage = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredHotels.slice(0, 12).map((hotel) => (
-              <HotelCard key={hotel.id} hotel={hotel} />
+              <HotelCard key={hotel.id} hotel={hotel} cityAverage={cityAverage} />
             ))}
           </div>
         )}

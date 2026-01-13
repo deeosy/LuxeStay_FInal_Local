@@ -124,26 +124,36 @@ const HotelDetail = () => {
     enabled: !!searchDestination && !loading
   });
 
-const getHotelKey = (h) => {
-  return h?.hotelId || h?.liteApiId || h?.id || null;
-};
+  const getHotelKey = (h) => {
+    return h?.hotelId || h?.liteApiId || h?.id || null;
+  };
 
-const similarHotels = useMemo(() => {
-  if (!similarHotelsRaw || !hotel) return [];
+  const similarHotels = useMemo(() => {
+    if (!similarHotelsRaw || !hotel) return [];
 
-  const currentId = getHotelKey(hotel);
-  if (!currentId) return [];
+    const currentId = getHotelKey(hotel);
+    if (!currentId) return [];
 
-  return similarHotelsRaw
-    .filter(h => {
-      const id = getHotelKey(h);
-      return id && id !== currentId;
-    })
-    .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    .slice(0, 3);
-}, [similarHotelsRaw, hotel]);
+    return similarHotelsRaw
+      .filter(h => {
+        const id = getHotelKey(h);
+        return id && id !== currentId;
+      })
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 3);
+  }, [similarHotelsRaw, hotel]);
 
+  // Price Psychology Logic
+  const cityAverage = useMemo(() => {
+    if (!similarHotels || similarHotels.length === 0) return null;
+    const total = similarHotels.reduce((acc, h) => acc + (h.price || 0), 0);
+    return Math.round(total / similarHotels.length);
+  }, [similarHotels]);
 
+  const priceDiffPercent = cityAverage ? Math.round(((hotel.price - cityAverage) / cityAverage) * 100) : 0;
+  const isGreatDeal = cityAverage && hotel.price < cityAverage;
+  const isPremium = cityAverage && hotel.price > cityAverage;
+  
   // Loading state for LiteAPI hotels
   if (isLiteApiHotel && loading) {
     return (
@@ -173,75 +183,70 @@ const similarHotels = useMemo(() => {
     );
   }
 
-  const handleBookNow = () => {
-    if (isDebug) {
-      console.group('🐞 DEBUG: HotelDetail Redirect');
-      console.log('Hotel ID:', hotel.liteApiId || hotel.id);
-      console.log('City:', hotel.city || hotel.location);
-      console.log('Price:', hotel.price);
-      console.log('Check-in:', checkIn);
-      console.log('Check-out:', checkOut);
-      console.log('Guests:', guests);
-      console.log('Rooms:', rooms);
-      console.log('Direct Booking URL:', hotel.bookingUrl);
-      
-      if (hotel.bookingUrl) {
-         try {
-           const urlObj = new URL(hotel.bookingUrl);
-           const params = urlObj.searchParams;
-           console.log('--- URL Params ---');
-           console.log('Full Params:', Object.fromEntries(params.entries()));
-         } catch(e) { console.error(e); }
-      }
-      console.groupEnd();
-      
-      if (hotel.bookingUrl) {
-          if (!window.confirm('DEBUG MODE: Redirecting to affiliate (HotelDetail). Proceed?')) {
-            return;
-          }
-      }
-    }
+const handleBookNow = () => {
+  const hotelIdForUrl = hotel.liteApiId || hotel.id;
 
-    // Track booking click
-    trackBookingClick({
-      hotel_id: hotel.liteApiId || hotel.id,
-      city: hotel.city || hotel.location,
-      price: hotel.price,
-      check_in: checkIn,
-      check_out: checkOut,
-      guests,
-      rooms,
-      source: 'liteapi'
-    });
+  if (isDebug) {
+    console.group('DEBUG: HotelDetail Redirect');
+    console.log('Hotel ID:', hotelIdForUrl);
+    console.log('City:', hotel.city || hotel.location);
+    console.log('Price:', hotel.price);
+    console.log('Check-in:', checkIn);
+    console.log('Check-out:', checkOut);
+    console.log('Guests:', guests);
+    console.log('Rooms:', rooms);
+    console.log('Direct Booking URL:', hotel.bookingUrl);
+    console.groupEnd();
 
-    // Use LiteAPI deep link if available
-    if (hotel.bookingUrl) {
-      trackAffiliateRedirect({
-        hotel_id: hotel.liteApiId || hotel.id,
-        city: hotel.city || hotel.location,
-      });
-      window.location.href = hotel.bookingUrl;
+    if (!window.confirm('DEBUG MODE: Continue redirect?')) {
       return;
     }
+  }
 
-    // Fallback for static hotels (keep existing flow for demo purposes)
-    setSelectedHotel(hotel);
-    
-    // Navigate to checkout with URL params for refresh support
-    const hotelIdForUrl = hotel.liteApiId || hotel.id;
-    const params = {
-      hotelId: hotelIdForUrl.toString(),
-    };
-    if (checkIn) params.checkIn = checkIn;
-    if (checkOut) params.checkOut = checkOut;
-    if (guests && guests !== 2) params.guests = guests.toString();
-    if (rooms && rooms !== 1) params.rooms = rooms.toString();
-    
-    navigate({
-      pathname: '/checkout',
-      search: createSearchParams(params).toString(),
-    });
+  trackBookingClick({
+    hotel_id: hotelIdForUrl,
+    city: hotel.city || hotel.location,
+    price: hotel.price,
+    check_in: checkIn,
+    check_out: checkOut,
+    guests,
+    rooms,
+    source: hotel.liteApiId ? 'liteapi' : 'static'
+  });
+
+  // 👉 LITEAPI hotels MUST go through monetization
+  if (hotel.liteApiId) {
+    const params = new URLSearchParams({
+      city: hotel.city || hotel.location || '',
+      hotel: hotel.name || '',
+      price: hotel.price || '',
+      page: location.pathname,
+      checkIn,
+      checkOut,
+      guests,
+    }).toString();
+
+    window.location.href = `/go/hotel/${hotelIdForUrl}?${params}`;
+    return;
+  }
+
+  // 👉 Static hotels go to checkout
+  setSelectedHotel(hotel);
+
+  const checkoutParams = {
+    hotelId: hotelIdForUrl.toString(),
   };
+  if (checkIn) checkoutParams.checkIn = checkIn;
+  if (checkOut) checkoutParams.checkOut = checkOut;
+  if (guests && guests !== 2) checkoutParams.guests = guests.toString();
+  if (rooms && rooms !== 1) checkoutParams.rooms = rooms.toString();
+
+  navigate({
+    pathname: '/checkout',
+    search: createSearchParams(checkoutParams).toString(),
+  });
+};
+
 
   // Calculate nights from global store dates
   const nights = getNights();
@@ -266,6 +271,13 @@ const similarHotels = useMemo(() => {
 
   const hotelImage = hotel.image;
 
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const priceValidUntil = tomorrow.toISOString().split('T')[0];
+  
+  const minPrice = similarHotels.length > 0 ? Math.min(hotel.price, ...similarHotels.map(h => h.price || Infinity)) : hotel.price;
+  const maxPrice = similarHotels.length > 0 ? Math.max(hotel.price, ...similarHotels.map(h => h.price || -Infinity)) : hotel.price;
+
   const hotelSchema = {
     "@context": "https://schema.org",
     "@type": "Hotel",
@@ -287,15 +299,16 @@ const similarHotels = useMemo(() => {
     "offers": {
       "@type": "AggregateOffer",
       "priceCurrency": "USD",
-      "lowPrice": hotel.price,
-      "highPrice": hotel.price * 1.5,
-      "offerCount": 1,
+      "lowPrice": minPrice,
+      "highPrice": maxPrice,
+      "offerCount": similarHotels.length + 1,
       "offers": [
         {
           "@type": "Offer",
           "url": pageUrl,
           "priceCurrency": "USD",
           "price": hotel.price,
+          "priceValidUntil": priceValidUntil,
           "availability": "https://schema.org/InStock"
         }
       ]
@@ -384,6 +397,28 @@ const similarHotels = useMemo(() => {
                   <span>{hotel.location}</span>
                 </div>
               </div>
+
+              {/* Price Psychology Badges */}
+              {cityAverage && (
+                <div className="mb-8 flex flex-wrap items-center gap-3">
+                   {isGreatDeal && (
+                     <div className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium">
+                       <Check className="w-4 h-4" /> Great Deal
+                     </div>
+                   )}
+                   {isPremium && (
+                     <div className="inline-flex items-center gap-1.5 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full text-sm font-medium">
+                       <Star className="w-4 h-4" /> Premium Stay
+                     </div>
+                   )}
+                   <span className="text-sm text-muted-foreground">
+                     {priceDiffPercent < 0 
+                        ? `This hotel is ${Math.abs(priceDiffPercent)}% cheaper than similar hotels in ${cityName}`
+                        : `This hotel is ${priceDiffPercent}% more expensive than similar hotels in ${cityName}`
+                     }
+                   </span>
+                </div>
+              )}
 
               {/* Quick Info */}
               <div className="flex flex-wrap gap-6 pb-8 border-b border-border">
@@ -552,7 +587,7 @@ const similarHotels = useMemo(() => {
               <h2 className="font-display text-2xl font-medium mb-8">Similar Hotels You May Like</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {similarHotels.map(similarHotel => (
-                  <HotelCard key={getHotelKey(similarHotel)} hotel={similarHotel} />
+                  <HotelCard key={getHotelKey(similarHotel)} hotel={similarHotel} cityAverage={cityAverage} />
                 ))}
               </div>
             </div>

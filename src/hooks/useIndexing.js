@@ -10,7 +10,10 @@ export function useIndexing(url) {
     
     // Check if running on localhost to avoid spamming from dev
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    
+      if (isLocalhost) {
+      console.log('🧪 Skipping Google indexing in local dev:', url);
+      return;
+    }
     // In production, we want to index. In dev, we might skip or log.
     // For now, we'll allow it but log it, or maybe skip if it's strictly local.
     // The user requirement says "Auto-submit on page load".

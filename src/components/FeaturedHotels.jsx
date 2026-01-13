@@ -4,6 +4,8 @@ import { featuredHotels } from '@/data/hotels';
 import { ArrowRight } from 'lucide-react';
 
 const FeaturedHotels = () => {
+  const averagePrice = featuredHotels.reduce((acc, curr) => acc + curr.price, 0) / featuredHotels.length;
+
   return (
     <section className="py-20 bg-secondary/30">
       <div className="container-luxury">
@@ -30,7 +32,7 @@ const FeaturedHotels = () => {
               className="animate-slide-up"
               style={{ animationDelay: `${index * 100}ms` }}
             >
-              <HotelCard hotel={hotel} />
+              <HotelCard hotel={hotel} cityAverage={averagePrice} />
             </div>
           ))}
         </div>
