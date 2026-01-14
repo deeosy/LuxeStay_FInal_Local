@@ -19,6 +19,7 @@ export const handler = async (event: any) => {
     const checkIn = params.checkIn || "";
     const checkOut = params.checkOut || "";
     const guests = params.guests || "";
+    const rooms = params.rooms || "";
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -31,17 +32,18 @@ export const handler = async (event: any) => {
       };
     }
 
-    const detailUrl = new URL(`${supabaseUrl}/functions/v1/liteapi`);
-    detailUrl.searchParams.set("action", "detail");
-    detailUrl.searchParams.set("hotelId", hotelId);
-    if (checkIn) detailUrl.searchParams.set("checkIn", checkIn);
-    if (checkOut) detailUrl.searchParams.set("checkOut", checkOut);
-    if (guests) detailUrl.searchParams.set("guests", guests);
+    const bookUrl = new URL(`${supabaseUrl}/functions/v1/liteapi`);
+    bookUrl.searchParams.set("action", "book");
+    bookUrl.searchParams.set("hotelId", hotelId);
+    if (checkIn) bookUrl.searchParams.set("checkIn", checkIn);
+    if (checkOut) bookUrl.searchParams.set("checkOut", checkOut);
+    if (guests) bookUrl.searchParams.set("guests", guests);
+    if (rooms) bookUrl.searchParams.set("rooms", rooms);
 
     let bookingUrl: string | null = null;
 
     try {
-      const detailRes = await fetch(detailUrl.toString(), {
+      const detailRes = await fetch(bookUrl.toString(), {
         method: "GET",
         headers: {
           Authorization: `Bearer ${serviceRoleKey}`,
@@ -50,7 +52,7 @@ export const handler = async (event: any) => {
 
       if (detailRes.ok) {
         const detailData = await detailRes.json();
-        bookingUrl = detailData?.hotel?.bookingUrl || null;
+        bookingUrl = detailData?.bookingUrl || null;
       } else {
         console.error("LiteAPI detail error:", detailRes.status, await detailRes.text());
       }
@@ -116,4 +118,3 @@ export const handler = async (event: any) => {
     };
   }
 };
-

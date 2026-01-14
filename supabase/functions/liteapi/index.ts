@@ -303,6 +303,94 @@ serve(async (req) => {
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    } else if (action === 'book') {
+      const hotelId = url.searchParams.get('hotelId');
+      const checkIn = url.searchParams.get('checkIn') || '';
+      const checkOut = url.searchParams.get('checkOut') || '';
+      const guests = parseInt(url.searchParams.get('guests') || '2');
+      const rooms = parseInt(url.searchParams.get('rooms') || '1');
+      const currency = url.searchParams.get('currency') || 'USD';
+
+      if (!hotelId || !checkIn || !checkOut) {
+        console.log('Book: Missing required parameters', { hotelId, checkIn, checkOut });
+        return new Response(
+          JSON.stringify({ error: 'hotelId, checkIn and checkOut are required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const bookUrl = `${LITEAPI_BASE_URL}/hotels/book`;
+      const requestBody = {
+        hotelId,
+        checkin: checkIn,
+        checkout: checkOut,
+        currency,
+        occupancies: [
+          {
+            rooms,
+            adults: guests,
+            children: [],
+          },
+        ],
+      };
+
+      try {
+        console.log('Booking request body:', JSON.stringify(requestBody));
+
+        const response = await fetch(bookUrl, {
+          method: 'POST',
+          headers: {
+            'X-API-Key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Booking API error: ${response.status} - ${errorText}`);
+          return new Response(
+            JSON.stringify({ error: 'Booking link not available' }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const data = await response.json();
+
+        const primary = data || {};
+        const candidate = Array.isArray(primary.data) && primary.data.length > 0
+          ? primary.data[0]
+          : primary;
+
+        const bookingUrl =
+          (typeof primary.paymentUrl === 'string' && primary.paymentUrl) ||
+          (typeof primary.deeplink === 'string' && primary.deeplink) ||
+          (typeof primary.bookingUrl === 'string' && primary.bookingUrl) ||
+          (typeof candidate.paymentUrl === 'string' && candidate.paymentUrl) ||
+          (typeof candidate.deeplink === 'string' && candidate.deeplink) ||
+          (typeof candidate.bookingUrl === 'string' && candidate.bookingUrl) ||
+          null;
+
+        if (!bookingUrl) {
+          console.log('Booking API returned no usable URL', JSON.stringify(data).substring(0, 500));
+          return new Response(
+            JSON.stringify({ error: 'Booking link not available' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Returning bookingUrl from LiteAPI');
+        return new Response(
+          JSON.stringify({ bookingUrl }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('Booking API exception:', error);
+        return new Response(
+          JSON.stringify({ error: 'Booking link not available' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     } else if (action === 'detail') {
       const hotelId = url.searchParams.get('hotelId');
       const checkIn = url.searchParams.get('checkIn') || '';
