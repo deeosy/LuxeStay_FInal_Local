@@ -9,10 +9,13 @@ import { Loader2, ArrowRight, CheckCircle } from 'lucide-react';
 import useBookingStore from '@/stores/useBookingStore';
 import SEOMetadata from '@/components/seo/SEOMetadata';
 import { useIndexing } from '@/hooks/useIndexing';
+import { useRevenueEngine } from '@/hooks/useRevenueEngine';
+import SEOFooter from '@/components/SEOFooter';
 
 const CATEGORIES = ['best', 'luxury', 'budget', 'family'];
 
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
 
 const CityCategoryPage = () => {
   const { citySlug, type } = useParams();
@@ -20,43 +23,76 @@ const CityCategoryPage = () => {
   const isValid = !!city && CATEGORIES.includes(type);
   
   const { checkIn, checkOut, guests, rooms } = useBookingStore();
+  const { shouldHideHotel, sortHotelsByRevenue } = useRevenueEngine();
 
-  const { hotels, loading, error } = useLiteApiSearch({
-    destination: city?.query,
-    locationId: city?.liteApiLocationId,
-    checkIn,
-    checkOut,
-    guests,
-    rooms,
-    enabled: isValid
-  });
+  // ✅ Corrected: Choose ONE param to avoid breaking LiteAPI
+  const searchParams = useMemo(() => {
+    if (!city) return { enabled: false };
+
+    // If we have the ID, use only the ID
+    if (city.liteApiLocationId) {
+      return {
+        locationId: city.liteApiLocationId,
+        checkIn,
+        checkOut,
+        guests,
+        rooms,
+        enabled: isValid
+      };
+    }
+
+    // Otherwise, fallback to text destination
+    return {
+      destination: city.query || city.cityName,
+      checkIn,
+      checkOut,
+      guests,
+      rooms,
+      enabled: isValid
+    };
+  }, [city, checkIn, checkOut, guests, rooms, isValid]);
+
+  // Use the clean params
+  const { hotels, loading, error } = useLiteApiSearch(searchParams);
+
 
   const filteredHotels = useMemo(() => {
     if (!hotels) return [];
     
-    const filtered = [...hotels];
+    // First, filter out low performers
+    const visibleHotels = hotels.filter(h => {
+        const id = h.liteApiId || h.id;
+        return !shouldHideHotel(id);
+    });
+    
+    let filtered = [...visibleHotels];
 
     switch (type) {
       case 'best':
-        // Sort by rating descending
-        return filtered.sort((a, b) => b.rating - a.rating);
+        // Sort by Revenue (EPC * Volume) instead of rating
+        return sortHotelsByRevenue(filtered);
       case 'luxury':
-        // Filter by price > 300 OR rating >= 4.5, sort by price desc
-        return filtered
-          .filter(h => h.price >= 300 || h.rating >= 4.5)
-          .sort((a, b) => b.price - a.price);
+        // Filter by price > 300 OR rating >= 4.5, sort by Revenue
+        return sortHotelsByRevenue(
+            filtered.filter(h => h.price >= 300 || h.rating >= 4.5)
+        );
       case 'budget':
-        // Sort by price ascending
+        // Sort by price ascending (keep price sort for budget as it's the defining feature)
         return filtered.sort((a, b) => a.price - b.price);
       case 'family':
-        // Filter by guest capacity >= 3 OR rating >= 4.0, sort by rating
-        return filtered
-          .filter(h => h.guests >= 3 || h.rating >= 4.0)
-          .sort((a, b) => b.rating - a.rating);
+        // Filter by guest capacity >= 3 OR rating >= 4.0, sort by Revenue
+        return sortHotelsByRevenue(
+             filtered.filter(h => h.guests >= 3 || h.rating >= 4.0)
+        );
       default:
-        return filtered;
+        return sortHotelsByRevenue(filtered);
     }
-  }, [hotels, type]);
+  }, [hotels, type, shouldHideHotel, sortHotelsByRevenue]);
+
+  const cityAverage = useMemo(() => {
+    if (!filteredHotels.length) return 0;
+    return filteredHotels.reduce((acc, h) => acc + (h.price || 0), 0) / filteredHotels.length;
+  }, [filteredHotels]);
 
   // Dynamic Content Generation
   const pageTitle = isValid ? `${capitalize(type)} Hotels in ${city.cityName}` : 'Hotels';
@@ -228,6 +264,8 @@ const CityCategoryPage = () => {
           </div>
         </div>
       </main>
+      
+      {city && <SEOFooter currentCity={city} />}
 
       <Footer />
     </div>

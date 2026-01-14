@@ -47,8 +47,11 @@ export function useLiteApiSearch({
           rooms: rooms.toString(),
         });
 
-        if (destination) params.set('destination', destination);
-        if (locationId) params.set('locationId', locationId);
+        if (locationId) {
+          params.set('locationId', locationId);
+        } else if (destination) {
+          params.set('destination', destination);
+        }
         if (checkIn) params.set('checkIn', checkIn);
         if (checkOut) params.set('checkOut', checkOut);
 

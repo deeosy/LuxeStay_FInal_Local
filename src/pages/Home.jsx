@@ -7,6 +7,7 @@ import { cities } from '@/data/cities';
 import Stats from '@/components/Stats';
 import heroImage from '@/assets/hero-hotel.jpg';
 import { ArrowRight, Shield, Clock, Award } from 'lucide-react';
+import SEOFooter from '@/components/SEOFooter';
 
 const Home = () => {
   return (
@@ -207,6 +208,7 @@ const Home = () => {
         </div>
       </section>
 
+      <SEOFooter />
       <Footer />
     </div>
   );

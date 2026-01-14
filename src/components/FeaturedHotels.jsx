@@ -2,9 +2,12 @@ import { Link } from 'react-router-dom';
 import HotelCard from './HotelCard';
 import { featuredHotels } from '@/data/hotels';
 import { ArrowRight } from 'lucide-react';
+import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 
 const FeaturedHotels = () => {
-  const averagePrice = featuredHotels.reduce((acc, curr) => acc + curr.price, 0) / featuredHotels.length;
+  const { shouldHideHotel, sortHotelsByRevenue } = useRevenueEngine();
+  const visibleHotels = sortHotelsByRevenue(featuredHotels.filter(h => !shouldHideHotel(h.id)));
+  const averagePrice = visibleHotels.reduce((acc, curr) => acc + curr.price, 0) / (visibleHotels.length || 1);
 
   return (
     <section className="py-20 bg-secondary/30">
@@ -26,13 +29,13 @@ const FeaturedHotels = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featuredHotels.map((hotel, index) => (
+          {visibleHotels.map((hotel, index) => (
             <div
               key={hotel.id}
               className="animate-slide-up"
               style={{ animationDelay: `${index * 100}ms` }}
             >
-              <HotelCard hotel={hotel} cityAverage={averagePrice} />
+              <HotelCard hotel={hotel} cityAverage={averagePrice} variant="featured" />
             </div>
           ))}
         </div>

@@ -1,8 +1,8 @@
 import { Link, useSearchParams, useLocation } from 'react-router-dom';
-import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, ExternalLink, Flame, DollarSign, Timer } from 'lucide-react';
+import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, ExternalLink, Flame, DollarSign, Timer, TrendingUp } from 'lucide-react';
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { trackAffiliateRedirect } from '@/utils/analytics';
-
+import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 
 const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
   const [searchParams] = useSearchParams();
@@ -10,6 +10,11 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
   const isDebug = searchParams.get('debug') === 'true';
   const { isFavorite, toggleFavorite } = useFavoritesStore();
   const hotelId = hotel.liteApiId || hotel.id;
+
+  const { getBadges } = useRevenueEngine();
+  const revenueBadges = getBadges(hotelId);
+  const isTopConverting = revenueBadges.some(b => b.type === 'top_converting');
+  const isTryInstead = revenueBadges.some(b => b.type === 'try_instead');
 
   const seoCity = hotel.citySlug || hotel.city || null;
   const linkTo = seoCity 
@@ -48,46 +53,18 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
   };
 
   const handleBookClick = (e) => {
-    if (hotel.bookingUrl) {
-      if (isDebug) {
-          e.preventDefault();
-          e.stopPropagation();
-          console.group('🐞 DEBUG: HotelCard Redirect');
-          console.log('Affiliate URL:', hotel.bookingUrl);
-          console.log('Hotel ID:', hotelId);
-          console.log('City:', seoCity || hotel.city);
-          
-          try {
-            const urlObj = new URL(hotel.bookingUrl);
-            const params = urlObj.searchParams;
-            console.log('--- URL Params ---');
-            console.log('Full Params:', Object.fromEntries(params.entries()));
-          } catch (err) {
-            if (isDebug) console.error(err);
-          }
-          console.groupEnd();
+    e.preventDefault();
+    e.stopPropagation();
 
-          if (window.confirm('DEBUG MODE: Redirecting to affiliate (HotelCard). Proceed?')) {
-             trackAffiliateRedirect({
-                hotel_id: hotelId,
-                city: seoCity || hotel.city,
-             });
-             window.location.href = hotel.bookingUrl;
-          }
-          return;
-      }
+    trackAffiliateRedirect({
+      hotel_id: hotelId,
+      city: seoCity || hotel.city,
+      page_path: currentPath
+    });
 
-      e.preventDefault();
-      e.stopPropagation();
-      
-      trackAffiliateRedirect({
-        hotel_id: hotelId,
-        city: seoCity || hotel.city,
-      });
-
-      window.location.href = hotel.bookingUrl;
-    }
+    window.location.href = affiliateLink;
   };
+
 
   if (variant === 'featured') {
     return (
@@ -102,6 +79,13 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 via-transparent to-transparent" />
+          <div className="absolute top-3 left-3 z-10">
+             {isTopConverting && (
+                <div className="flex items-center gap-1 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm animate-pulse">
+                  <TrendingUp className="w-3 h-3" /> Top Converting
+                </div>
+             )}
+          </div>
           <div className="absolute bottom-4 left-4 right-4">
             <div className="flex items-center gap-1 mb-2">
               <Star className="w-4 h-4 fill-accent text-accent" />
@@ -149,6 +133,16 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
         <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
+          {isTopConverting && (
+            <div className="flex items-center gap-1 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm animate-pulse">
+              <TrendingUp className="w-3 h-3" /> Top Converting
+            </div>
+          )}
+          {isTryInstead && (
+            <div className="flex items-center gap-1 bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
+              <DollarSign className="w-3 h-3" /> Try This Instead
+            </div>
+          )}
           {isHighDemand && (
             <div className="flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
               <Flame className="w-3 h-3" /> High Demand
@@ -231,22 +225,13 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
         
         {/* Affiliate Link / Call to Action */}
         <div className="mt-4 pt-3 border-t border-border">
-          {hotel.bookingUrl ? (
             <a 
-              href={affiliateLink} rel="nofollow sponsored"
+              href={affiliateLink} onClick={handleBookClick} rel="nofollow sponsored"
               className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors text-sm"
             >
               View Deal
               <ExternalLink className="w-3 h-3" />
             </a>
-          ) : (
-            <Link 
-              to={linkTo}
-              className="w-full flex items-center justify-center gap-2 bg-secondary text-secondary-foreground py-2 px-4 rounded-lg font-medium hover:bg-secondary/80 transition-colors text-sm"
-            >
-              View Details
-            </Link>
-          )}
         </div>
       </div>
     </div>

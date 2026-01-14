@@ -225,82 +225,90 @@ serve(async (req) => {
 
     if (action === 'search') {
       const destination = url.searchParams.get('destination') || '';
+      const locationId = url.searchParams.get('locationId');
       const checkIn = url.searchParams.get('checkIn') || '';
       const checkOut = url.searchParams.get('checkOut') || '';
       const guests = parseInt(url.searchParams.get('guests') || '2');
       const rooms = parseInt(url.searchParams.get('rooms') || '1');
       const limit = parseInt(url.searchParams.get('limit') || '20');
 
-      if (!destination) {
-        console.log('Search: No destination provided');
+      if (!destination && !locationId) {
         return new Response(
-          JSON.stringify({ hotels: [], message: 'No destination provided' }),
+          JSON.stringify({ 
+            hotels: [], 
+            source: 'liteapi',
+            message: 'No destination or locationId provided' 
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      console.log(`Searching: destination="${destination}", checkIn=${checkIn}, checkOut=${checkOut}, guests=${guests}`);
-
-      // Step 1: Get placeId from destination name or use provided locationId
-      const locationId = url.searchParams.get('locationId');
       let placeId = locationId;
-
       if (!placeId && destination) {
         placeId = await getPlaceId(apiKey, destination);
       }
-      
+
       if (!placeId) {
-        console.log(`No placeId found for "${destination}" and no locationId provided, returning empty`);
         return new Response(
-          JSON.stringify({ hotels: [], message: `No results for "${destination}"` }),
+          JSON.stringify({ 
+            hotels: [], 
+            source: 'liteapi',
+            message: `No location found for "${destination}"` 
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Step 2: Get hotels by placeId
       const hotelData = await getHotelsByPlace(apiKey, placeId, limit);
-      
+
       if (hotelData.length === 0) {
-        console.log('No hotels found for placeId');
         return new Response(
-          JSON.stringify({ hotels: [], message: 'No hotels available' }),
+          JSON.stringify({ 
+            hotels: [], 
+            source: 'liteapi',
+            message: 'No hotels found in this location' 
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Step 3: If dates provided, get rates for hotels
+      // If dates are provided, enrich with live rates
       if (checkIn && checkOut) {
         const hotelIds = hotelData.map(h => h.id || h.hotelId).filter(Boolean).slice(0, 10);
-        const ratesData = await getHotelRates(apiKey, hotelIds, checkIn, checkOut, guests);
-        
+        const ratesData = await getHotelRates(apiKey, hotelIds, checkIn, checkOut, guests, rooms);
+
         if (ratesData.length > 0) {
           const hotelsWithRates = ratesData.map((item: any) => {
-            const hotel = item.hotelData || hotelData.find(h => (h.id || h.hotelId) === item.hotelId) || item;
-            return normalizeHotel(hotel, item);
+            const baseHotel = hotelData.find(h => (h.id || h.hotelId) === item.hotelId) || item.hotelData || item;
+            return normalizeHotel(baseHotel, item);
           });
-          
-          console.log(`Returning ${hotelsWithRates.length} hotels with rates`);
+
           return new Response(
-            JSON.stringify({ hotels: hotelsWithRates, source: 'liteapi' }),
+            JSON.stringify({ 
+              hotels: hotelsWithRates, 
+              source: 'liteapi' 
+            }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       }
 
-      // Return hotels without rates (static data)
+      // Fallback: return normalized static hotel data (no live rates)
       const hotels = hotelData.map((h: any) => normalizeHotel(h));
-      console.log(`Returning ${hotels.length} hotels (no rates)`);
-      
+
       return new Response(
-        JSON.stringify({ hotels, source: 'liteapi' }),
+        JSON.stringify({ 
+          hotels, 
+          source: 'liteapi' 
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
-
     } else if (action === 'detail') {
       const hotelId = url.searchParams.get('hotelId');
       const checkIn = url.searchParams.get('checkIn') || '';
       const checkOut = url.searchParams.get('checkOut') || '';
       const guests = parseInt(url.searchParams.get('guests') || '2');
+      const rooms = parseInt(url.searchParams.get('rooms') || '1');
 
       if (!hotelId) {
         return new Response(

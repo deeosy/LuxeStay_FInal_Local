@@ -2,12 +2,18 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { cities } from "../src/data/cities.js";
+import { createClient } from "@supabase/supabase-js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DOMAIN = "https://luxestayhaven.com";
 const TODAY = new Date().toISOString().split("T")[0];
+
+// Initialize Supabase (Ensure env vars are available)
+const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://ovigqjqqyqgqjqqyqgqj.supabase.co";
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 const extractLocs = (xml) => {
   const locs = [];
@@ -20,6 +26,46 @@ const extractLocs = (xml) => {
 const generateSitemap = async () => {
   const publicDir = path.resolve(__dirname, "../public");
   const sitemapPath = path.join(publicDir, "sitemap.xml");
+
+  // Fetch Performance Data for Priority Engine
+  let cityEpc = {};
+  let hotelEpc = {};
+  let siteAvgEpc = 0;
+
+  if (supabase) {
+    console.log("Fetching revenue data for Sitemap Priority Engine...");
+    const { data: performance, error } = await supabase
+      .from('hotel_performance')
+      .select('*');
+    
+    if (!error && performance && performance.length > 0) {
+      // Calculate Site Average EPC
+      const totalRevenue = performance.reduce((sum, p) => sum + (p.revenue || 0), 0);
+      const totalClicks = performance.reduce((sum, p) => sum + (p.clicks || 0), 0);
+      siteAvgEpc = totalClicks > 0 ? totalRevenue / totalClicks : 0;
+      console.log(`Site Average EPC: $${siteAvgEpc.toFixed(2)}`);
+
+      // Map Hotel EPC
+      performance.forEach(p => {
+        hotelEpc[p.hotel_id] = p.epc || 0;
+      });
+
+      // Map City EPC (Aggregation)
+      const cityPerformance = {};
+      performance.forEach(p => {
+        if (!cityPerformance[p.city]) cityPerformance[p.city] = { revenue: 0, clicks: 0 };
+        cityPerformance[p.city].revenue += p.revenue || 0;
+        cityPerformance[p.city].clicks += p.clicks || 0;
+      });
+
+      Object.keys(cityPerformance).forEach(city => {
+        const stats = cityPerformance[city];
+        cityEpc[city.toLowerCase()] = stats.clicks > 0 ? stats.revenue / stats.clicks : 0;
+      });
+    } else {
+        console.log("Could not fetch performance data, using defaults.");
+    }
+  }
 
   const prevSitemap = fs.existsSync(sitemapPath)
     ? fs.readFileSync(sitemapPath, "utf-8")
@@ -37,14 +83,19 @@ const generateSitemap = async () => {
 
   const urls = [
     { loc: "/", changefreq: "daily", priority: "1.0" },
+    { loc: "/top-cities", changefreq: "weekly", priority: "0.9" },
     { loc: "/search", changefreq: "weekly", priority: "0.8" },
     { loc: "/destinations", changefreq: "weekly", priority: "0.6" },
 
     ...cities.flatMap(city => {
+      // Determine priority based on EPC
+      const thisCityEpc = cityEpc[city.cityName.toLowerCase()] || cityEpc[city.citySlug] || 0;
+      const cityPriority = thisCityEpc > siteAvgEpc ? "0.9" : "0.5";
+
       const cityUrls = [
-        { loc: `/hotels-in/${city.citySlug}`, changefreq: "weekly", priority: "0.9" },
-        { loc: `/hotels-in-${city.citySlug}`, changefreq: "weekly", priority: "0.9" },
-        { loc: `/best-hotels-in-${city.citySlug}`, changefreq: "weekly", priority: "0.8" },
+        { loc: `/hotels-in/${city.citySlug}`, changefreq: "weekly", priority: cityPriority },
+        { loc: `/hotels-in-${city.citySlug}`, changefreq: "weekly", priority: cityPriority },
+        { loc: `/best-hotels-in-${city.citySlug}`, changefreq: "weekly", priority: cityPriority },
         { loc: `/cheap-hotels-in-${city.citySlug}`, changefreq: "weekly", priority: "0.7" },
         { loc: `/luxury-hotels-in-${city.citySlug}`, changefreq: "weekly", priority: "0.7" },
         { loc: `/family-hotels-in-${city.citySlug}`, changefreq: "weekly", priority: "0.7" },
@@ -90,7 +141,13 @@ const generateSitemap = async () => {
     }),
 
     ...poiPages.map(loc => ({ loc, changefreq: "weekly", priority: "0.6" })),
-    ...hotelIds.map(id => ({ loc: `/hotel/${id}`, changefreq: "weekly", priority: "0.7" })),
+    ...hotelIds.map(id => {
+      // Determine priority based on EPC
+      const thisHotelEpc = hotelEpc[id] || 0;
+      const hotelPriority = thisHotelEpc > siteAvgEpc ? "0.9" : "0.5";
+      
+      return { loc: `/hotel/${id}`, changefreq: "weekly", priority: hotelPriority };
+    }),
   ];
 
   const sitemapContent = `<?xml version="1.0" encoding="UTF-8"?>

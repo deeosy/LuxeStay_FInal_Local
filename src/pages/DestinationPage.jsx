@@ -184,15 +184,39 @@ const DestinationPage = () => {
 
   const { checkIn, checkOut, guests, rooms } = useBookingStore();
 
-  const { hotels, loading, error, source } = useLiteApiSearch({
-    destination: destinationConfig.query,
-    locationId: destinationConfig.liteApiLocationId,
-    checkIn,
-    checkOut,
-    guests,
-    rooms,
-    enabled: true
-  });
+  // ✅ Fix: Memoize params to ensure only ONE search method is sent to LiteAPI
+  const searchParams = useMemo(() => {
+    // If we have a city in our database and it has a LiteAPI ID, use it (Best accuracy)
+    if (targetCity?.liteApiLocationId) {
+      return {
+        locationId: targetCity.liteApiLocationId,
+        checkIn,
+        checkOut,
+        guests,
+        rooms,
+        enabled: !!targetCity
+      };
+    }
+
+    // Fallback: Use text-based search (Destination)
+    // We prioritize district + city if a district exists, otherwise just city
+    const textQuery = targetDistrict 
+      ? `${targetDistrict}, ${resolvedCityName}` 
+      : (targetCity?.query || resolvedCityName);
+
+    return {
+      destination: textQuery,
+      checkIn,
+      checkOut,
+      guests,
+      rooms,
+      enabled: !!textQuery
+    };
+  }, [targetCity, targetDistrict, resolvedCityName, checkIn, checkOut, guests, rooms]);
+
+  // Use the safe params
+  const { hotels, loading, error } = useLiteApiSearch(searchParams);
+
 
   const filteredHotels = useMemo(() => {
     if (!hotels) return [];

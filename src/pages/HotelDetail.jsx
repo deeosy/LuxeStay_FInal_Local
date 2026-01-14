@@ -23,9 +23,13 @@ import {
   ChevronLeft,
   Check,
   Loader2,
+  TrendingUp,
+  ArrowRightCircle
 } from 'lucide-react';
 import SEOMetadata from '@/components/seo/SEOMetadata';
 import { useIndexing } from '@/hooks/useIndexing';
+import { useRevenueEngine } from '@/hooks/useRevenueEngine';
+import SEOFooter from '@/components/SEOFooter';
 
 const facilityIcons = {
   Spa: Waves,
@@ -54,6 +58,7 @@ const findStaticHotel = (id) => {
 };
 
 
+
 const HotelDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -78,6 +83,8 @@ const HotelDetail = () => {
     setSelectedHotel,
     getNights,
   } = useBookingStore();
+
+  const { getBadges, getBetterAlternative, shouldHideHotel, sortHotelsByRevenue } = useRevenueEngine();
 
   // UI-only local state
   const [isFavorite, setIsFavorite] = useState(false);
@@ -118,11 +125,26 @@ const HotelDetail = () => {
   const knownCity = cities.find(c => cityForSearch && c.cityName.toLowerCase() === cityForSearch.toLowerCase());
   const searchDestination = knownCity ? knownCity.query : cityForSearch;
 
-  // Fetch similar hotels
-  const { hotels: similarHotelsRaw, loading: loadingSimilar } = useLiteApiSearch({
-    destination: searchDestination,
-    enabled: !!searchDestination && !loading
-  });
+  // ✅ Corrected Logic: Prioritize LiteAPI ID, fallback to destination string
+  const similarSearchParams = useMemo(() => {
+    if (!hotel) return { enabled: false };
+      // Use the ID if we have it (most accurate), otherwise use text search
+    if (knownCity?.liteApiLocationId) {
+      return { 
+        locationId: knownCity.liteApiLocationId,
+        enabled: !!searchDestination && !loading 
+      };
+    }
+
+    return { 
+      destination: searchDestination,
+      enabled: !!searchDestination && !loading 
+    };
+  }, [hotel, knownCity, searchDestination, loading]);
+
+  // Fetch similar hotels using the refined params
+  const { hotels: similarHotelsRaw, loading: loadingSimilar } = useLiteApiSearch(similarSearchParams);
+
 
   const getHotelKey = (h) => {
     return h?.hotelId || h?.liteApiId || h?.id || null;
@@ -134,14 +156,21 @@ const HotelDetail = () => {
     const currentId = getHotelKey(hotel);
     if (!currentId) return [];
 
-    return similarHotelsRaw
+    const filtered = similarHotelsRaw
       .filter(h => {
         const id = getHotelKey(h);
+        if (shouldHideHotel(id)) return false; // Filter low performers
         return id && id !== currentId;
-      })
-      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-      .slice(0, 3);
-  }, [similarHotelsRaw, hotel]);
+      });
+      
+    return sortHotelsByRevenue(filtered).slice(0, 3);
+  }, [similarHotelsRaw, hotel, shouldHideHotel, sortHotelsByRevenue]);
+
+  const betterAlternative = useMemo(() => {
+    if (!hotel || !similarHotelsRaw) return null;
+    const currentId = getHotelKey(hotel);
+    return getBetterAlternative(currentId, similarHotelsRaw);
+  }, [hotel, similarHotelsRaw, getBetterAlternative]);
 
   // Price Psychology Logic
   const cityAverage = useMemo(() => {
@@ -153,6 +182,9 @@ const HotelDetail = () => {
   const priceDiffPercent = cityAverage ? Math.round(((hotel.price - cityAverage) / cityAverage) * 100) : 0;
   const isGreatDeal = cityAverage && hotel.price < cityAverage;
   const isPremium = cityAverage && hotel.price > cityAverage;
+
+  const revenueBadges = hotel ? getBadges(hotel.liteApiId || hotel.id) : [];
+  const isTopConverting = revenueBadges.some(b => b.type === 'top_converting');
   
   // Loading state for LiteAPI hotels
   if (isLiteApiHotel && loading) {
@@ -328,6 +360,26 @@ const handleBookNow = () => {
 
       <main className="pt-24 pb-20"> 
         <div className="container-luxury">
+          {/* Better Alternative Banner (Revenue Optimization) */}
+          {betterAlternative && (
+            <div className="mb-8 p-4 bg-green-50 border border-green-200 rounded-lg flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-green-100 rounded-full text-green-700">
+                  <TrendingUp className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-green-900">💰 Better Value Available</h3>
+                  <p className="text-green-800 text-sm">
+                    <span className="font-bold">{betterAlternative.name}</span> is trending with travelers right now.
+                  </p>
+                </div>
+              </div>
+              <Link to={`/hotel/${betterAlternative.hotelId || betterAlternative.liteApiId || betterAlternative.id}`} className="flex items-center gap-2 bg-green-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors shadow-sm whitespace-nowrap">
+                Check Deal <ArrowRightCircle className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
+
           {/* Breadcrumb & Actions */}
           <div className="flex items-center justify-between mb-6">
             <nav className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -401,6 +453,11 @@ const handleBookNow = () => {
               {/* Price Psychology Badges */}
               {cityAverage && (
                 <div className="mb-8 flex flex-wrap items-center gap-3">
+                   {isTopConverting && (
+                     <div className="inline-flex items-center gap-1.5 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full text-sm font-medium animate-pulse">
+                       <TrendingUp className="w-4 h-4" /> Top Converting Hotel
+                     </div>
+                   )}
                    {isGreatDeal && (
                      <div className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium">
                        <Check className="w-4 h-4" /> Great Deal
@@ -618,6 +675,9 @@ const handleBookNow = () => {
           </div>
         </div>
       </main>
+
+      {/* SEO Footer for internal linking */}
+      {knownCity && <SEOFooter currentCity={knownCity} currentHotel={hotel} />}
 
       <Footer />
     </div>

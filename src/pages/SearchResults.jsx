@@ -4,13 +4,16 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HotelCard from '@/components/HotelCard';
 import { allHotels, destinations } from '@/data/hotels';
+import { cities } from '@/data/cities';
 import { useLiteApiSearch } from '@/hooks/useLiteApiHotels';
 import useBookingStore from '@/stores/useBookingStore';
+import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 import { Search, SlidersHorizontal, MapPin, X, Calendar, Users, Loader2, Wifi, Waves, Sparkles, Dumbbell, Utensils, Car, Wind, Coffee } from 'lucide-react';
 
 const SearchResults = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { shouldHideHotel, sortHotelsByRevenue } = useRevenueEngine();
 
   // Read booking-critical data from global store
   const { 
@@ -100,18 +103,105 @@ const SearchResults = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, isInitialized]);
 
-  // Fetch hotels from LiteAPI
-  const { hotels: liteApiHotels, loading: liteApiLoading, error: liteApiError, source } = useLiteApiSearch({
-    destination: searchQuery,
-    checkIn,
-    checkOut,
-    guests,
-    enabled: isInitialized,
+  // const matchedCity = useMemo(() => {
+  //   if (!searchQuery) return null;
+  //   return cities.find(
+  //     c => c.cityName.toLowerCase() === searchQuery.toLowerCase()
+  //   );
+  // }, [searchQuery]);
+
+  // const fuzzyCityMatch = useMemo(() => {
+  //   if (!searchQuery) return null;
+  //   return cities.find(c =>
+  //     c.cityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  //     searchQuery.toLowerCase().includes(c.cityName.toLowerCase())
+  //   );
+  // }, [searchQuery]);
+  // const resolvedCity = matchedCity || fuzzyCityMatch;
+
+  //   const liteSearchParams = useMemo(() => {
+  //   if (!isInitialized) return { enabled: false };
+
+
+  //   if (resolvedCity?.liteApiLocationId) {
+  //     return {
+  //       locationId: resolvedCity.liteApiLocationId,
+  //       checkIn,
+  //       checkOut,
+  //       guests,
+  //       enabled: true,
+  //     };
+  //   }
+
+
+
+  //   return {
+  //     enabled: false // wait until we resolve a city
+  //   };
+  // }, [matchedCity, searchQuery, checkIn, checkOut, guests, isInitialized]);
+
+  // ✅ All hooks at top level — correct order preserved
+const matchedCity = useMemo(() => {
+  if (!searchQuery) return null;
+  return cities.find(
+    c => c.cityName.toLowerCase() === searchQuery.toLowerCase()
+  );
+}, [searchQuery]);
+
+const fuzzyCityMatch = useMemo(() => {
+  if (!searchQuery || matchedCity) return null;
+  return cities.find(c =>
+    c.cityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    searchQuery.toLowerCase().includes(c.cityName.toLowerCase())
+  );
+}, [searchQuery, matchedCity]);
+
+const resolvedCity = matchedCity || fuzzyCityMatch;
+
+const liteSearchParams = useMemo(() => {
+  if (!isInitialized) return { enabled: false };
+
+  console.log('Search Params Debug:', { 
+    resolvedCity: resolvedCity?.cityName, 
+    liteApiLocationId: resolvedCity?.liteApiLocationId,
+    destination,
+    searchQuery 
   });
+
+  if (resolvedCity?.liteApiLocationId) {
+    return {
+      locationId: resolvedCity.liteApiLocationId,
+      checkIn,
+      checkOut,
+      guests,
+      enabled: true,
+    };
+  }
+
+  // Fallback to text-based search if we have a destination
+const targetDestination = resolvedCity ? `${resolvedCity.cityName}, ${resolvedCity.country}` : destination || searchQuery;  
+if (targetDestination) {
+    return {
+      destination: targetDestination,
+      checkIn,
+      checkOut,
+      guests,
+      enabled: true,
+    };
+  }
+
+  return { enabled: false };
+}, [resolvedCity, destination, searchQuery, checkIn, checkOut, guests, isInitialized]);
+
+  const { hotels: liteApiHotels, loading: liteApiLoading, error: liteApiError, source } =
+  useLiteApiSearch(liteSearchParams);
+
 
   const filteredHotels = useMemo(() => {
     // Use LiteAPI results (or empty if none found)
     let results = [...liteApiHotels];
+
+    console.log('Filtering hotels. Initial count:', results.length, 'Source:', source);
 
     // Filter by search query (already filtered by API, but apply local filter for static fallback)
     if (searchQuery && source?.includes('static')) {
@@ -127,6 +217,8 @@ const SearchResults = () => {
     results = results.filter(
       (hotel) => hotel.price >= priceRange[0] && hotel.price <= priceRange[1]
     );
+
+    console.log('Hotels after filtering:', results.length);
 
     // Filter by rating
     if (selectedRating) {
@@ -154,6 +246,9 @@ const SearchResults = () => {
       results = results.filter((hotel) => (hotel.guests || 2) >= guests);
     }
 
+    // Filter out low performers (Revenue Optimization)
+    results = results.filter(h => !shouldHideHotel(h.liteApiId || h.id));
+
     // Sort
     switch (sortBy) {
       case 'price-low':
@@ -165,13 +260,20 @@ const SearchResults = () => {
       case 'rating':
         results.sort((a, b) => b.rating - a.rating);
         break;
+      case 'recommended':
       default:
-        // Keep original order for 'recommended'
+        // Sort by Revenue (EPC * Volume)
+        results = sortHotelsByRevenue(results);
         break;
     }
 
     return results;
-  }, [liteApiHotels, searchQuery, priceRange, selectedRating, selectedAmenities, sortBy, guests, source]);
+  }, [liteApiHotels, searchQuery, priceRange, selectedRating, selectedAmenities, sortBy, guests, source, shouldHideHotel, sortHotelsByRevenue]);
+
+  const cityAverage = useMemo(() => {
+    if (!filteredHotels.length) return null;
+    return filteredHotels.reduce((acc, h) => acc + (h.price || 0), 0) / filteredHotels.length;
+  }, [filteredHotels]);
 
   const toggleAmenity = (amenityId) => {
     setSelectedAmenities(prev => 
@@ -425,7 +527,7 @@ const SearchResults = () => {
                   className="animate-slide-up"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  <HotelCard hotel={hotel} />
+                  <HotelCard hotel={hotel} cityAverage={cityAverage} />
                 </div>
               ))}
             </div>
