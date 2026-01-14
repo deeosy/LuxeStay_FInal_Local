@@ -1,5 +1,6 @@
 [[redirects]]
-  from = "/go/hotel/*"
-  to = "/.netlify/functions/go-hotel/:splat"
-  status = 200
+from = "/go/hotel/*"
+to = "/.netlify/functions/go-hotel/:splat"
+status = 302
+force = true
 
