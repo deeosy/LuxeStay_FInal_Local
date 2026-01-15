@@ -67,11 +67,10 @@ export function useLiteApiSearch({
         });
 
         const res = await fetch(
-          `/.netlify/functions/liteapi?${params.toString()}`,
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/liteapi?${params.toString()}`,
           {
             headers: {
-              // 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              'Content-Type': 'application/json',
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
           }
         );
@@ -156,11 +155,11 @@ export function useLiteApiHotelDetail({ hotelId, checkIn, checkOut, guests, room
         console.log('Fetching LiteAPI hotel detail:', params.toString());
 
         const response = await fetch(
-          `/netlify/functions/liteapi?${params.toString()}`,
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/liteapi?${params.toString()}`,
           {
             method: 'GET',
             headers: {
-              // 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
               'Content-Type': 'application/json',
             },
           }
