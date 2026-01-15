@@ -4,7 +4,6 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': 'https://luxestayhaven.com',  // Your exact domain (no * in production for security)
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Credentials': 'true',  // If you use cookies/auth
 };
 
 console.log('Function started');
