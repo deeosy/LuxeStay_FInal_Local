@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://luxestayhaven.com",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  'Access-Control-Allow-Origin': 'https://luxestayhaven.com',  // Your exact domain (no * in production for security)
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Credentials': 'true',  // If you use cookies/auth
 };
 
 console.log('Function started');
@@ -209,9 +210,9 @@ async function getHotelRates(
 
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+// Handle preflight FIRST — before any other logic
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders, status: 204 });
   }
 
   const apiKey = Deno.env.get('LITE_API_KEY_PROD');
