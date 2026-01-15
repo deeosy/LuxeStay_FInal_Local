@@ -5,6 +5,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+console.log('Function started');
+console.log('Available env keys (debug):', Array.from(Deno.env.keys()).join(', '));
+console.log('LITE_API_KEY_PROD value (first 10 chars):', Deno.env.get('LITE_API_KEY_PROD')?.substring(0, 10) || 'UNDEFINED');
+
 const LITEAPI_BASE_URL = 'https://api.liteapi.travel/v3.0';
 
 // In-memory cache with TTL (15 minutes for places, 10 minutes for hotels)
@@ -208,14 +212,16 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const apiKey = Deno.env.get('LITEAPI_API_KEY');
+  const apiKey = Deno.env.get('LITE_API_KEY_PROD');
   if (!apiKey) {
-    console.error('LITEAPI_API_KEY not configured');
+    console.error('LITE_API_KEY_PROD not configured');
+    console.log('All env vars:', Object.fromEntries(Array.from(Deno.env.entries()).map(([k,v]) => [k, v.substring(0,10) + '...'])));
     return new Response(
       JSON.stringify({ error: 'API key not configured', hotels: [] }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+  console.log('API key loaded successfully (first 10 chars):', apiKey.substring(0, 10));
 
   try {
     const url = new URL(req.url);
