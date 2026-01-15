@@ -19,7 +19,7 @@ console.log('Function started');
 console.log('Available env keys (debug):', Array.from(Deno.env.keys()).join(', '));
 console.log('LITE_API_KEY_PROD value (first 10 chars):', Deno.env.get('LITE_API_KEY_PROD')?.substring(0, 10) || 'UNDEFINED');
 
-const LITEAPI_BASE_URL = 'https://luxestayhaven.com/.netlify/functions/liteapi';
+const LITEAPI_BASE_URL = 'https://api.liteapi.travel/v3.0';
 
 // In-memory cache with TTL (15 minutes for places, 10 minutes for hotels)
 const cache = new Map<string, { data: any; expires: number }>();
