@@ -1,12 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://luxestayhaven.com",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, apikey, x-client-info, content-type, x-supabase-auth",
-  "Access-Control-Max-Age": "86400",
-};
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("origin") || "https://luxestayhaven.com";
+
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "authorization, apikey, x-client-info, content-type, x-supabase-auth",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+  };
+}
+
 
 console.log('Function started');
 console.log('Available env keys (debug):', Array.from(Deno.env.keys()).join(', '));
@@ -215,17 +222,16 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: corsHeaders,
+      headers: getCorsHeaders(req),
     });
   }
 
   const apiKey = Deno.env.get('LITE_API_KEY_PROD');
   if (!apiKey) {
     console.error('LITE_API_KEY_PROD not configured');
-    console.log('All env vars:', Object.fromEntries(Array.from(Deno.env.entries()).map(([k,v]) => [k, v.substring(0,10) + '...'])));
     return new Response(
       JSON.stringify({ error: 'API key not configured', hotels: [] }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     );
   }
   console.log('API key loaded successfully (first 10 chars):', apiKey.substring(0, 10));
@@ -252,7 +258,7 @@ serve(async (req) => {
             source: 'liteapi',
             message: 'No destination or locationId provided' 
           }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
 
@@ -268,7 +274,7 @@ serve(async (req) => {
             source: 'liteapi',
             message: `No location found for "${destination}"` 
           }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
 
@@ -281,7 +287,7 @@ serve(async (req) => {
             source: 'liteapi',
             message: 'No hotels found in this location' 
           }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
 
@@ -301,7 +307,7 @@ serve(async (req) => {
               hotels: hotelsWithRates, 
               source: 'liteapi' 
             }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
           );
         }
       }
@@ -314,7 +320,7 @@ serve(async (req) => {
           hotels, 
           source: 'liteapi' 
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       );
     } else if (action === 'book') {
       const hotelId = url.searchParams.get('hotelId');
@@ -328,7 +334,7 @@ serve(async (req) => {
         console.log('Book: Missing required parameters', { hotelId, checkIn, checkOut });
         return new Response(
           JSON.stringify({ error: 'hotelId, checkIn and checkOut are required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
 
@@ -364,7 +370,7 @@ serve(async (req) => {
           console.error(`Booking API error: ${response.status} - ${errorText}`);
           return new Response(
             JSON.stringify({ error: 'Booking link not available' }),
-            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
           );
         }
 
@@ -388,20 +394,20 @@ serve(async (req) => {
           console.log('Booking API returned no usable URL', JSON.stringify(data).substring(0, 500));
           return new Response(
             JSON.stringify({ error: 'Booking link not available' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
           );
         }
 
         console.log('Returning bookingUrl from LiteAPI');
         return new Response(
           JSON.stringify({ bookingUrl }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       } catch (error) {
         console.error('Booking API exception:', error);
         return new Response(
           JSON.stringify({ error: 'Booking link not available' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
     } else if (action === 'detail') {
@@ -414,7 +420,7 @@ serve(async (req) => {
       if (!hotelId) {
         return new Response(
           JSON.stringify({ error: 'Hotel ID required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
 
@@ -432,7 +438,7 @@ serve(async (req) => {
         console.error(`Hotel detail error: ${detailResponse.status} - ${errorText}`);
         return new Response(
           JSON.stringify({ error: 'Hotel not found' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 404, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
 
@@ -452,13 +458,13 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ hotel, source: 'liteapi' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
       JSON.stringify({ error: 'Invalid action' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {
@@ -466,7 +472,7 @@ serve(async (req) => {
     console.error('LiteAPI error:', errorMessage);
     return new Response(
       JSON.stringify({ error: errorMessage, hotels: [] }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     );
   }
 });
