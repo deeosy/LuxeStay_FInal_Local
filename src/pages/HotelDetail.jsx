@@ -258,7 +258,16 @@ const handleBookNow = () => {
       guests,
     }).toString();
 
-    window.location.href = `/go/hotel/${hotelIdForUrl}?${params}`;
+    const bookParams = new URLSearchParams({
+      action: 'book',
+      hotelId: hotelIdForUrl,
+      checkIn,
+      checkOut,
+      guests: guests.toString(),
+    });
+    window.location.href = `/.netlify/functions/liteapi?${bookParams}`;
+
+    // window.location.href = `/go/hotel/${hotelIdForUrl}?${params}`;
     return;
   }
 
