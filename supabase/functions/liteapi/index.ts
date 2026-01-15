@@ -206,6 +206,7 @@ async function getHotelRates(
   }
 }
 
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
