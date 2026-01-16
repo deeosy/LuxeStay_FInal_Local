@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .env
 
+# Windows reserved device file created accidentally
+NUL
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

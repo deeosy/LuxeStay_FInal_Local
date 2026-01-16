@@ -23,14 +23,21 @@ export const handler: Handler = async (event) => {
     const guests = params.guests || "";
     const rooms = params.rooms || "";
 
+    const fallbackLocation =
+      page && typeof page === "string" && page.startsWith("/")
+        ? page
+        : `/hotel/${hotelId}`;
+
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
       console.error("Supabase environment variables are not configured");
       return {
-        statusCode: 500,
-        body: "Server configuration error",
+        statusCode: 302,
+        headers: {
+          Location: fallbackLocation,
+        },
       };
     }
 
@@ -98,11 +105,6 @@ export const handler: Handler = async (event) => {
     } catch (error) {
       console.error("Failed to log affiliate click", error);
     }
-
-    const fallbackLocation =
-      page && typeof page === "string" && page.startsWith("/")
-        ? page
-        : `/hotel/${hotelId}`;
 
     const redirectLocation = bookingUrl || fallbackLocation;
 
