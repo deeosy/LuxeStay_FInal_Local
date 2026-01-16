@@ -17,7 +17,7 @@ function getCorsHeaders(req: Request) {
 
 console.log('Function started');
 
-const LITEAPI_BASE_URL = 'https://luxestayhaven.com/.netlify/functions/liteapi';
+const LITEAPI_BASE_URL = "https://api.liteapi.travel/v3.0";
 
 // In-memory cache with TTL (15 minutes for places, 10 minutes for hotels)
 const cache = new Map<string, { data: any; expires: number }>();
@@ -203,6 +203,49 @@ async function getHotelsByPlace(apiKey: string, placeId: string, limit: number):
   }
 }
 
+// Get hotels by city name using data/hotels endpoint (with caching)
+async function getHotelsByCity(
+  apiKey: string,
+  city: string,
+  limit: number,
+): Promise<any[]> {
+  const normalizedCity = city.toLowerCase().trim();
+  const cacheKey = `hotels-city:${normalizedCity}:${limit}`;
+  const cached = getCached<any[]>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const hotelsUrl =
+      `${LITEAPI_BASE_URL}/data/hotels?city=${encodeURIComponent(city)}&limit=${limit}`;
+    console.log(`Fetching hotels by city: ${hotelsUrl}`);
+
+    const response = await fetch(hotelsUrl, {
+      method: "GET",
+      headers: { "X-API-Key": apiKey },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Hotels by city API error: ${response.status} - ${errorText}`);
+      return [];
+    }
+
+    const data = await response.json();
+    console.log(
+      "Hotels by city raw response:",
+      JSON.stringify(data).substring(0, 500),
+    );
+    console.log(`Got ${data.data?.length || 0} hotels from city search`);
+
+    const hotels = data.data || [];
+    setCache(cacheKey, hotels, HOTEL_CACHE_TTL);
+    return hotels;
+  } catch (error) {
+    console.error("Hotels by city error:", error);
+    return [];
+  }
+}
+
 // Get hotel rates for specific hotel IDs (with caching)
 async function getHotelRates(
   apiKey: string, 
@@ -218,12 +261,21 @@ async function getHotelRates(
 
   try {
     const ratesUrl = `${LITEAPI_BASE_URL}/hotels/rates`;
+    // Distribute guests across rooms (simple distribution)
+    const guestsPerRoom = Math.max(1, Math.floor(guests / rooms));
+    const remainder = guests % rooms;
+    
+    const occupancies = Array.from({ length: rooms }, (_, i) => ({
+      adults: i < remainder ? guestsPerRoom + 1 : guestsPerRoom,
+      children: []
+    }));
+
     const requestBody = {
       checkin: checkIn,
       checkout: checkOut,
       currency: 'USD',
       guestNationality: 'US',
-      occupancies: [{ rooms: rooms, adults: guests, children: [] }],
+      occupancies: occupancies,
       hotelIds: hotelIds,
       includeHotelData: true,
     };
@@ -284,52 +336,61 @@ serve(async (req) => {
 
     console.log(`LiteAPI request: action=${action}`);
 
-    if (action === 'search') {
-      const destination = url.searchParams.get('destination') || '';
-      const locationId = url.searchParams.get('locationId');
-      const checkIn = url.searchParams.get('checkIn') || '';
-      const checkOut = url.searchParams.get('checkOut') || '';
-      const guests = parseInt(url.searchParams.get('guests') || '2');
-      const rooms = parseInt(url.searchParams.get('rooms') || '1');
-      const limit = parseInt(url.searchParams.get('limit') || '20');
+    if (action === "search") {
+      const destination = url.searchParams.get("destination") || "";
+      const locationId = url.searchParams.get("locationId");
+      const checkIn = url.searchParams.get("checkIn") || "";
+      const checkOut = url.searchParams.get("checkOut") || "";
+      const guests = parseInt(url.searchParams.get("guests") || "2");
+      const rooms = parseInt(url.searchParams.get("rooms") || "1");
+      const limit = parseInt(url.searchParams.get("limit") || "20");
 
       if (!destination && !locationId) {
         return new Response(
-          JSON.stringify({ 
-            hotels: [], 
-            source: 'liteapi',
-            message: 'No destination or locationId provided' 
+          JSON.stringify({
+            hotels: [],
+            source: "liteapi",
+            message: "No destination or locationId provided",
           }),
-          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+          {
+            headers: {
+              ...getCorsHeaders(req),
+              "Content-Type": "application/json",
+            },
+          },
         );
       }
+
+      let hotelData: any[] = [];
 
       let placeId = locationId;
       if (!placeId && destination) {
         placeId = await getPlaceId(apiKey, destination);
       }
 
-      if (!placeId) {
-        return new Response(
-          JSON.stringify({ 
-            hotels: [], 
-            source: 'liteapi',
-            message: `No location found for "${destination}"` 
-          }),
-          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+      if (placeId) {
+        hotelData = await getHotelsByPlace(apiKey, placeId, limit);
+      } else if (destination) {
+        const simpleCity = destination.split(",")[0].trim() || destination;
+        console.log(
+          `No placeId resolved, falling back to city search for "${simpleCity}"`,
         );
+        hotelData = await getHotelsByCity(apiKey, simpleCity, limit);
       }
-
-      const hotelData = await getHotelsByPlace(apiKey, placeId, limit);
 
       if (hotelData.length === 0) {
         return new Response(
-          JSON.stringify({ 
-            hotels: [], 
-            source: 'liteapi',
-            message: 'No hotels found in this location' 
+          JSON.stringify({
+            hotels: [],
+            source: "liteapi",
+            message: `No location found for "${destination}"`,
           }),
-          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+          {
+            headers: {
+              ...getCorsHeaders(req),
+              "Content-Type": "application/json",
+            },
+          },
         );
       }
 
@@ -381,18 +442,22 @@ serve(async (req) => {
       }
 
       const bookUrl = `${LITEAPI_BASE_URL}/hotels/book`;
+      
+      // Distribute guests across rooms
+      const guestsPerRoom = Math.max(1, Math.floor(guests / rooms));
+      const remainder = guests % rooms;
+      
+      const occupancies = Array.from({ length: rooms }, (_, i) => ({
+        adults: i < remainder ? guestsPerRoom + 1 : guestsPerRoom,
+        children: []
+      }));
+
       const requestBody = {
         hotelId,
         checkin: checkIn,
         checkout: checkOut,
         currency,
-        occupancies: [
-          {
-            rooms,
-            adults: guests,
-            children: [],
-          },
-        ],
+        occupancies,
       };
 
       try {

@@ -29,8 +29,12 @@ export async function handler(event) {
 
     const LITEAPI_KEY = process.env.LITEAPI_KEY_SANDBOX || process.env.VITE_LITEAPI_KEY;
     
-    // Default Fallback URL (Sandbox/Direct Book)
-    let finalUrl = `https://api.liteapi.travel/v3/hotels/${hotelId}/book?apiKey=${LITEAPI_KEY}`;
+    // Default Fallback: Redirect to the hotel detail page on the site
+    // We avoid constructing a direct API URL with the key to prevent exposing secrets
+    let finalUrl = `https://luxestayhaven.com/hotel/${hotelId}`;
+    
+    // Attempt to get a better booking URL via Supabase function if possible
+    // (This matches go-hotel logic but keeps this function standalone if needed)
     let selectedOffer = null;
 
     // ------------------------------------
