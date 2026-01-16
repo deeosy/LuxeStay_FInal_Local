@@ -71,6 +71,11 @@ export function useLiteApiSearch({
         );
 
         const data = await res.json();
+        console.log('LiteAPI edge response JSON (search):', {
+          status: res.status,
+          ok: res.ok,
+          data,
+        });
 
         if (!res.ok) {
           throw new Error(data?.error || `LiteAPI HTTP ${res.status}`);
@@ -162,6 +167,12 @@ export function useLiteApiHotelDetail({ hotelId, checkIn, checkOut, guests, room
         }
 
         const result = await response.json();
+        
+        console.log('LiteAPI edge response JSON (detail):', {
+          status: response.status,
+          ok: response.ok,
+          result,
+        });
         
         if (result.hotel) {
           console.log(`Got hotel from ${result.source}`);

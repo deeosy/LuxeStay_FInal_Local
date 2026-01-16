@@ -153,6 +153,10 @@ async function getHotelsByPlace(apiKey: string, placeId: string, limit: number):
     }
 
     const data = await response.json();
+    console.log(
+      'Hotels by place raw response:',
+      JSON.stringify(data).substring(0, 500),
+    );
     console.log(`Got ${data.data?.length || 0} hotels from placeId search`);
     const hotels = data.data || [];
     setCache(cacheKey, hotels, HOTEL_CACHE_TTL);
@@ -206,6 +210,10 @@ async function getHotelRates(
     }
 
     const data = await response.json();
+    console.log(
+      'Rates raw response:',
+      JSON.stringify(data).substring(0, 500),
+    );
     console.log(`Got rates for ${data.data?.length || 0} hotels`);
     const rates = data.data || [];
     setCache(cacheKey, rates, RATES_CACHE_TTL);
@@ -373,6 +381,10 @@ serve(async (req) => {
         }
 
         const data = await response.json();
+        console.log(
+          'Booking raw response:',
+          JSON.stringify(data).substring(0, 500),
+        );
 
         const primary = data || {};
         const candidate = Array.isArray(primary.data) && primary.data.length > 0
