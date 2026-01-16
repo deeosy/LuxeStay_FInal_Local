@@ -16,8 +16,6 @@ function getCorsHeaders(req: Request) {
 
 
 console.log('Function started');
-console.log('Available env keys (debug):', Array.from(Deno.env.keys()).join(', '));
-console.log('LITE_API_KEY_PROD value (first 10 chars):', Deno.env.get('LITE_API_KEY_PROD')?.substring(0, 10) || 'UNDEFINED');
 
 const LITEAPI_BASE_URL = 'https://luxestayhaven.com/.netlify/functions/liteapi';
 
@@ -124,6 +122,44 @@ async function getPlaceId(apiKey: string, destination: string): Promise<string |
     }
     
     console.log(`No placeId found for "${destination}"`);
+
+    const simple = destination.split(",")[0].trim();
+    if (simple && simple !== destination) {
+      console.log(`Retrying places lookup with simplified destination "${simple}"`);
+      const simpleCacheKey = `place:${simple.toLowerCase()}`;
+      const simpleCached = getCached<string>(simpleCacheKey);
+      if (simpleCached) return simpleCached;
+
+      const simpleUrl =
+        `${LITEAPI_BASE_URL}/data/places?textQuery=${encodeURIComponent(simple)}&type=locality`;
+      console.log(`Fetching places (simplified): ${simpleUrl}`);
+
+      const simpleResponse = await fetch(simpleUrl, {
+        method: "GET",
+        headers: { "X-API-Key": apiKey },
+      });
+
+      if (!simpleResponse.ok) {
+        const simpleErrorText = await simpleResponse.text();
+        console.error(
+          `Places API error (simplified): ${simpleResponse.status} - ${simpleErrorText}`,
+        );
+      } else {
+        const simpleData = await simpleResponse.json();
+        console.log(
+          `Places response (simplified):`,
+          JSON.stringify(simpleData).substring(0, 500),
+        );
+        const simplePlace = simpleData.data?.[0];
+        if (simplePlace?.placeId) {
+          console.log(`Found placeId: ${simplePlace.placeId} for "${simple}"`);
+          setCache(simpleCacheKey, simplePlace.placeId, PLACE_CACHE_TTL);
+          return simplePlace.placeId;
+        }
+        console.log(`No placeId found for simplified destination "${simple}"`);
+      }
+    }
+
     return null;
   } catch (error) {
     console.error('Places API error:', error);
