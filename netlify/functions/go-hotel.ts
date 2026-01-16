@@ -69,41 +69,43 @@ export const handler: Handler = async (event) => {
       console.error("Failed to fetch hotel detail from LiteAPI function", error);
     }
 
-    const headers = event.headers || {};
-    const userAgent =
-      headers["user-agent"] ||
-      headers["User-Agent"] ||
-      "";
-    const ip =
-      headers["x-forwarded-for"] ||
-      headers["client-ip"] ||
-      headers["x-real-ip"] ||
-      "";
+    if (bookingUrl) {
+      const headers = event.headers || {};
+      const userAgent =
+        headers["user-agent"] ||
+        headers["User-Agent"] ||
+        "";
+      const ip =
+        headers["x-forwarded-for"] ||
+        headers["client-ip"] ||
+        headers["x-real-ip"] ||
+        "";
 
-    try {
-      await fetch(`${supabaseUrl}/rest/v1/affiliate_clicks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: serviceRoleKey,
-          Authorization: `Bearer ${serviceRoleKey}`,
-        },
-        body: JSON.stringify({
-          hotel_id: hotelId,
-          city,
-          hotel_name: hotelName,
-          price: price ? Number(price) : null,
-          page,
-          check_in: checkIn || null,
-          check_out: checkOut || null,
-          guests: guests ? Number(guests) : null,
-          booking_url: bookingUrl,
-          user_agent: userAgent,
-          ip,
-        }),
-      });
-    } catch (error) {
-      console.error("Failed to log affiliate click", error);
+      try {
+        await fetch(`${supabaseUrl}/rest/v1/affiliate_clicks`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            hotel_id: hotelId,
+            city,
+            hotel_name: hotelName,
+            price: price ? Number(price) : null,
+            page,
+            check_in: checkIn || null,
+            check_out: checkOut || null,
+            guests: guests ? Number(guests) : null,
+            booking_url: bookingUrl,
+            user_agent: userAgent,
+            ip,
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to log affiliate click", error);
+      }
     }
 
     const redirectLocation = bookingUrl || fallbackLocation;
