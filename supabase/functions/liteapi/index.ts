@@ -468,9 +468,19 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('LiteAPI error:', errorMessage);
+
+    const url = new URL(req.url);
+    const action = url.searchParams.get('action') || 'search';
+
+    const status = action === 'book' ? 500 : 200;
+    const payload =
+      action === 'search'
+        ? { error: errorMessage, hotels: [], source: 'liteapi-fallback' }
+        : { error: errorMessage };
+
     return new Response(
-      JSON.stringify({ error: errorMessage, hotels: [] }),
-      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+      JSON.stringify(payload),
+      { status, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     );
   }
 });

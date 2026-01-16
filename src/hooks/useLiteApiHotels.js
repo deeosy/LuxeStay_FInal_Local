@@ -70,15 +70,18 @@ export function useLiteApiSearch({
           `${import.meta.env.VITE_LITEAPI_BASE}?${params.toString()}`
         );
 
-
         const data = await res.json();
 
-        if (data.hotels) {
+        if (!res.ok) {
+          throw new Error(data?.error || `LiteAPI HTTP ${res.status}`);
+        }
+
+        if (Array.isArray(data.hotels) && data.hotels.length > 0) {
           console.log(`Got ${data.hotels.length} hotels from ${data.source}`);
           setHotels(data.hotels);
           setSource(data.source || 'liteapi');
         } else {
-          throw new Error('No hotels returned');
+          throw new Error(data?.message || 'No hotels returned');
         }
       } catch (err) {
         console.error('LiteAPI search error:', err);
