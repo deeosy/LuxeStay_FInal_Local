@@ -218,10 +218,8 @@ async function getHotelRates(
 
 
 serve(async (req) => {
-// Handle preflight FIRST — before any other logic
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
+    return new Response("ok", {
       headers: getCorsHeaders(req),
     });
   }

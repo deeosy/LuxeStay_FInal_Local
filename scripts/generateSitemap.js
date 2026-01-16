@@ -28,8 +28,8 @@ const generateSitemap = async () => {
   const sitemapPath = path.join(publicDir, "sitemap.xml");
 
   // Fetch Performance Data for Priority Engine
-  let cityEpc = {};
-  let hotelEpc = {};
+  const cityEpc = {};
+  const hotelEpc = {};
   let siteAvgEpc = 0;
 
   if (supabase) {

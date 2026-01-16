@@ -203,14 +203,13 @@ if (targetDestination) {
 
     console.log('Filtering hotels. Initial count:', results.length, 'Source:', source);
 
-    // Filter by search query (already filtered by API, but apply local filter for static fallback)
     if (searchQuery && source?.includes('static')) {
       const query = searchQuery.toLowerCase();
-      results = results.filter(
-        (hotel) =>
-          hotel.name.toLowerCase().includes(query) ||
-          hotel.location.toLowerCase().includes(query)
-      );
+      results = results.filter((hotel) => {
+        const name = (hotel.name || '').toLowerCase();
+        const location = (hotel.location || hotel.city || '').toLowerCase();
+        return name.includes(query) || location.includes(query);
+      });
     }
 
     // Filter by price

@@ -65,7 +65,7 @@ const CityCategoryPage = () => {
         return !shouldHideHotel(id);
     });
     
-    let filtered = [...visibleHotels];
+    const filtered = [...visibleHotels];
 
     switch (type) {
       case 'best':

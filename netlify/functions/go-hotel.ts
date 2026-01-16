@@ -1,4 +1,6 @@
-export const handler = async (event: any) => {
+import type { Handler } from "@netlify/functions";
+
+export const handler: Handler = async (event) => {
   try {
     const path = event.path || "";
     const segments = path.split("/").filter(Boolean);

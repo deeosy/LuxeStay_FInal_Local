@@ -71,9 +71,9 @@ const DestinationPage = () => {
   const variant = getCityPageVariant(location.pathname);
 
   // Resolution Logic
-  let resolvedCitySlug = citySlug;
-  let resolvedDistrictSlug = districtSlug;
-  let resolvedNearbyCitySlug = nearbyCitySlug; // For "nearby-from" route, the first param is nearbyCitySlug? No, route is /hotels-near-:nearbyCitySlug-from-:citySlug
+  const resolvedCitySlug = citySlug;
+  const resolvedDistrictSlug = districtSlug;
+  const resolvedNearbyCitySlug = nearbyCitySlug; // For "nearby-from" route, the first param is nearbyCitySlug? No, route is /hotels-near-:nearbyCitySlug-from-:citySlug
   // Wait, in /hotels-near-:nearbyCitySlug-from-:citySlug, the params are nearbyCitySlug and citySlug.
   // In /hotels-in-:citySlug-:districtSlug, we might need manual parsing if react-router doesn't split it perfectly.
   // Actually, I defined /hotels-in-:citySlug-:districtSlug. But citySlug can be multi-word?

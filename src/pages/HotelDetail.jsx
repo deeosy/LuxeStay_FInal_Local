@@ -256,18 +256,10 @@ const handleBookNow = () => {
       checkIn,
       checkOut,
       guests,
+      rooms: rooms.toString(),
     }).toString();
 
-    const bookParams = new URLSearchParams({
-      action: 'book',
-      hotelId: hotelIdForUrl,
-      checkIn,
-      checkOut,
-      guests: guests.toString(),
-    });
-    window.location.href = `/.netlify/functions/liteapi?${bookParams}`;
-
-    // window.location.href = `/go/hotel/${hotelIdForUrl}?${params}`;
+    window.location.href = `/go/hotel/${hotelIdForUrl}?${params}`;
     return;
   }
 

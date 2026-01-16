@@ -12,12 +12,7 @@ const SEOFooter = ({ currentCity, currentHotel }) => {
     path: `/best-hotels-in-${city.citySlug}`
   }));
 
-  // 3. Hotels Near {POI} & Categories
-  // If we are on a city page, show POIs and Category links for that city.
-  // If we are on a hotel page, show POIs for the hotel's city.
-  // If global (Home), show a mix or top POIs.
-  
-  let poiLinks = [];
+  const poiLinks = [];
   if (currentCity) {
     // Add Category Links first
     poiLinks.push(
