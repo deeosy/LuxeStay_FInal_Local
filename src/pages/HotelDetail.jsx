@@ -113,6 +113,7 @@ const HotelDetail = () => {
   // UI-only local state
   const [isFavorite, setIsFavorite] = useState(false);
   const [showExitIntent, setShowExitIntent] = useState(false);
+  const [canShowExit, setCanShowExit] = useState(false);
 
   // Check for static hotel first
   const staticHotel = findStaticHotel(id);
@@ -248,26 +249,37 @@ const HotelDetail = () => {
     cityName,
     Boolean(isBudgetHotel)
   );
-  
+
+  useEffect(() => {
+    const timer = setTimeout(() => setCanShowExit(true), 7000);
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const alreadyShown = sessionStorage.getItem('lsh_exit_intent_shown');
-    if (alreadyShown) return;
+    if (!hotel || !hotel.liteApiId) return;
+
+    const exitKey = `exit_shown_${hotel.liteApiId}`;
+    const clickedKey = `exit_clicked_${hotel.liteApiId}`;
 
     const handleMouseOut = (event) => {
-      if (event.clientY <= 0) {
-        if (window.innerWidth >= 1024) {
-          sessionStorage.setItem('lsh_exit_intent_shown', '1');
-          setShowExitIntent(true);
-        }
-      }
+      if (event.clientY > 0) return;
+      if (window.innerWidth < 1024) return;
+      if (!canShowExit) return;
+
+      const hasShownExit = sessionStorage.getItem(exitKey);
+      const hasClicked = sessionStorage.getItem(clickedKey);
+      if (hasShownExit || hasClicked) return;
+
+      sessionStorage.setItem(exitKey, '1');
+      setShowExitIntent(true);
     };
 
     document.addEventListener('mouseout', handleMouseOut);
     return () => {
       document.removeEventListener('mouseout', handleMouseOut);
     };
-  }, []);
+  }, [hotel, canShowExit]);
 
   if (isLiteApiHotel && loading) {
     return (
@@ -299,6 +311,11 @@ const HotelDetail = () => {
 
 const handleBookNow = () => {
   const hotelIdForUrl = hotel.liteApiId || hotel.id;
+
+  if (typeof window !== 'undefined' && hotel.liteApiId) {
+    const clickedKey = `exit_clicked_${hotel.liteApiId}`;
+    sessionStorage.setItem(clickedKey, '1');
+  }
 
   if (isDebug) {
     console.group('DEBUG: HotelDetail Redirect');
