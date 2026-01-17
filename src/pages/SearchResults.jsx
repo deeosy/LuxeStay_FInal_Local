@@ -9,6 +9,7 @@ import { useLiteApiSearch } from '@/hooks/useLiteApiHotels';
 import useBookingStore from '@/stores/useBookingStore';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 import { Search, SlidersHorizontal, MapPin, X, Calendar, Users, Loader2, Wifi, Waves, Sparkles, Dumbbell, Utensils, Car, Wind, Coffee } from 'lucide-react';
+import SessionDealReminder from '@/components/SessionDealReminder';
 
 const SearchResults = () => {
   const [searchParams] = useSearchParams();
@@ -274,6 +275,17 @@ if (targetDestination) {
     return filteredHotels.reduce((acc, h) => acc + (h.price || 0), 0) / filteredHotels.length;
   }, [filteredHotels]);
 
+  const budgetThreshold = useMemo(() => {
+    if (!filteredHotels.length) return null;
+    const prices = filteredHotels
+      .map(h => h.price || 0)
+      .filter(price => price > 0);
+    if (!prices.length) return null;
+    const sorted = [...prices].sort((a, b) => a - b);
+    const index = Math.floor((sorted.length - 1) * 0.3);
+    return sorted[index];
+  }, [filteredHotels]);
+
   const toggleAmenity = (amenityId) => {
     setSelectedAmenities(prev => 
       prev.includes(amenityId) 
@@ -526,7 +538,7 @@ if (targetDestination) {
                   className="animate-slide-up"
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  <HotelCard hotel={hotel} cityAverage={cityAverage} />
+                  <HotelCard hotel={hotel} cityAverage={cityAverage} budgetThreshold={budgetThreshold} />
                 </div>
               ))}
             </div>

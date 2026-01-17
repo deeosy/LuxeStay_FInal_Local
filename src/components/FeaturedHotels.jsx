@@ -7,7 +7,19 @@ import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 const FeaturedHotels = () => {
   const { shouldHideHotel, sortHotelsByRevenue } = useRevenueEngine();
   const visibleHotels = sortHotelsByRevenue(featuredHotels.filter(h => !shouldHideHotel(h.id)));
-  const averagePrice = visibleHotels.reduce((acc, curr) => acc + curr.price, 0) / (visibleHotels.length || 1);
+  const averagePrice =
+    visibleHotels.reduce((acc, curr) => acc + (curr.price || 0), 0) /
+    (visibleHotels.length || 1);
+
+  const budgetThreshold = (() => {
+    const prices = visibleHotels
+      .map(h => h.price || 0)
+      .filter(price => price > 0);
+    if (!prices.length) return null;
+    const sorted = [...prices].sort((a, b) => a - b);
+    const index = Math.floor((sorted.length - 1) * 0.3);
+    return sorted[index];
+  })();
 
   return (
     <section className="py-20 bg-secondary/30">
@@ -35,7 +47,12 @@ const FeaturedHotels = () => {
               className="animate-slide-up"
               style={{ animationDelay: `${index * 100}ms` }}
             >
-              <HotelCard hotel={hotel} cityAverage={averagePrice} variant="featured" />
+              <HotelCard
+                hotel={hotel}
+                cityAverage={averagePrice}
+                budgetThreshold={budgetThreshold}
+                variant="featured"
+              />
             </div>
           ))}
         </div>

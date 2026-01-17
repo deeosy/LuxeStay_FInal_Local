@@ -30,6 +30,13 @@ import SEOMetadata from '@/components/seo/SEOMetadata';
 import { useIndexing } from '@/hooks/useIndexing';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 import SEOFooter from '@/components/SEOFooter';
+import PriceAnchor from '@/components/PriceAnchor';
+import ScarcityBadge from '@/components/ScarcityBadge';
+import UrgencyNote from '@/components/UrgencyNote';
+import TrustSignal from '@/components/TrustSignal';
+import ExitIntentModal from '@/components/ExitIntentModal';
+import BookingCTA from '@/components/BookingCTA';
+import CompareAlternatives from '@/components/CompareAlternatives';
 
 const facilityIcons = {
   Spa: Waves,
@@ -50,11 +57,28 @@ const facilityIcons = {
 };
 
 
-// Find hotel by ID or slug in static data
 const findStaticHotel = (id) => {
   const numericId = Number(id);
   if (!numericId) return null;
   return allHotels.find((h) => h.id === numericId) || null;
+};
+
+
+
+const getBookingLabel = (rating, isBudget) => {
+  if (isBudget) return 'View Cheapest Option';
+  if (rating >= 4.5) return 'View Best Rated Deal';
+  return 'View Best Deal';
+};
+
+const getPriceMicrocopy = (price, average, city, isBudget) => {
+  if (!price || !average) return null;
+  if (isBudget) return 'One of the better-priced hotels in this area';
+  if (price < average) {
+    if (city) return `Great value for stays in ${city}`;
+    return 'Great value compared with similar stays';
+  }
+  return 'Priced similarly to other stays in this area';
 };
 
 
@@ -88,6 +112,7 @@ const HotelDetail = () => {
 
   // UI-only local state
   const [isFavorite, setIsFavorite] = useState(false);
+  const [showExitIntent, setShowExitIntent] = useState(false);
 
   // Check for static hotel first
   const staticHotel = findStaticHotel(id);
@@ -124,6 +149,8 @@ const HotelDetail = () => {
 
   const knownCity = cities.find(c => cityForSearch && c.cityName.toLowerCase() === cityForSearch.toLowerCase());
   const searchDestination = knownCity ? knownCity.query : cityForSearch;
+  
+  const cityName = knownCity ? knownCity.cityName : (hotel?.city || 'City');
 
   // ✅ Corrected Logic: Prioritize LiteAPI ID, fallback to destination string
   const similarSearchParams = useMemo(() => {
@@ -156,14 +183,20 @@ const HotelDetail = () => {
     const currentId = getHotelKey(hotel);
     if (!currentId) return [];
 
-    const filtered = similarHotelsRaw
-      .filter(h => {
-        const id = getHotelKey(h);
-        if (shouldHideHotel(id)) return false; // Filter low performers
-        return id && id !== currentId;
-      });
-      
-    return sortHotelsByRevenue(filtered).slice(0, 3);
+    const filtered = similarHotelsRaw.filter(h => {
+      const id = getHotelKey(h);
+      if (shouldHideHotel(id)) return false;
+      return id && id !== currentId;
+    });
+
+    const byPrice = filtered.filter(h => {
+      if (!hotel.price || !h.price) return true;
+      const diff = Math.abs(h.price - hotel.price) / hotel.price;
+      return diff <= 0.15;
+    });
+
+    const candidates = byPrice.length > 0 ? byPrice : filtered;
+    return sortHotelsByRevenue(candidates).slice(0, 3);
   }, [similarHotelsRaw, hotel, shouldHideHotel, sortHotelsByRevenue]);
 
   const betterAlternative = useMemo(() => {
@@ -179,14 +212,63 @@ const HotelDetail = () => {
     return Math.round(total / similarHotels.length);
   }, [similarHotels]);
 
-  const priceDiffPercent = cityAverage ? Math.round(((hotel.price - cityAverage) / cityAverage) * 100) : 0;
-  const isGreatDeal = cityAverage && hotel.price < cityAverage;
-  const isPremium = cityAverage && hotel.price > cityAverage;
+  const budgetThreshold = useMemo(() => {
+    const samples = [];
+    if (hotel?.price && hotel.price > 0) {
+      samples.push(hotel.price);
+    }
+    if (similarHotels && similarHotels.length > 0) {
+      similarHotels.forEach(h => {
+        if (h.price && h.price > 0) {
+          samples.push(h.price);
+        }
+      });
+    }
+    if (!samples.length) return null;
+    const sorted = [...samples].sort((a, b) => a - b);
+    const index = Math.floor((sorted.length - 1) * 0.3);
+    return sorted[index];
+  }, [hotel, similarHotels]);
+
+  const priceDiffPercent =
+    cityAverage && hotel?.price
+      ? Math.round(((hotel.price - cityAverage) / cityAverage) * 100)
+      : 0;
+  const isGreatDeal = Boolean(cityAverage && hotel?.price && hotel.price < cityAverage);
+  const isPremium = Boolean(cityAverage && hotel?.price && hotel.price > cityAverage);
+  const isBudgetHotel =
+    budgetThreshold && hotel?.price && hotel.price > 0 && hotel.price <= budgetThreshold;
 
   const revenueBadges = hotel ? getBadges(hotel.liteApiId || hotel.id) : [];
   const isTopConverting = revenueBadges.some(b => b.type === 'top_converting');
+  const bookingLabel = getBookingLabel(hotel?.rating || 0, Boolean(isBudgetHotel));
+  const priceMicrocopy = getPriceMicrocopy(
+    hotel?.price,
+    cityAverage,
+    cityName,
+    Boolean(isBudgetHotel)
+  );
   
-  // Loading state for LiteAPI hotels
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const alreadyShown = sessionStorage.getItem('lsh_exit_intent_shown');
+    if (alreadyShown) return;
+
+    const handleMouseOut = (event) => {
+      if (event.clientY <= 0) {
+        if (window.innerWidth >= 1024) {
+          sessionStorage.setItem('lsh_exit_intent_shown', '1');
+          setShowExitIntent(true);
+        }
+      }
+    };
+
+    document.addEventListener('mouseout', handleMouseOut);
+    return () => {
+      document.removeEventListener('mouseout', handleMouseOut);
+    };
+  }, []);
+
   if (isLiteApiHotel && loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -291,7 +373,7 @@ const handleBookNow = () => {
   const maxGuests = hotel.guests;
 
   // Internal Linking Logic
-  const cityName = knownCity ? knownCity.cityName : (hotel.city || 'City');
+  // cityName is already defined above
   const citySlug = knownCity ? knownCity.citySlug : null;
   const nearbyCities = cities
     .filter(c => c.citySlug !== citySlug)
@@ -422,9 +504,8 @@ const handleBookNow = () => {
               alt={hotel.name}
               className="w-full h-full object-cover"
             />
-            <div className="absolute bottom-4 right-4 price-tag text-lg">
-              ${hotel.price}
-              <span className="text-sm font-normal">/night</span>
+            <div className="absolute bottom-4 right-4">
+              <PriceAnchor price={hotel.price} size="lg" />
             </div>
           </div>
 
@@ -433,21 +514,26 @@ const handleBookNow = () => {
             <div className="lg:col-span-2">
               {/* Header */}
               <div className="mb-8">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-1">
                   <div className="flex items-center gap-1">
                     <Star className="w-5 h-5 fill-accent text-accent" />
                     <span className="font-medium">{hotel.rating}</span>
                   </div>
-                  <span className="text-muted-foreground">
-                    ({hotel.reviews} reviews)
-                  </span>
+                  {hotel.reviews && (
+                    <span className="text-sm text-muted-foreground">
+                      ⭐ {hotel.rating} — Loved by {hotel.reviews}+ travelers
+                    </span>
+                  )}
                 </div>
                 <h1 className="font-display text-3xl md:text-4xl font-medium mb-3">
                   {hotel.name}
                 </h1>
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <MapPin className="w-5 h-5" />
-                  <span>{hotel.location}</span>
+                <div className="flex flex-col gap-1 text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-5 h-5" />
+                    <span>{hotel.location}</span>
+                  </div>
+                  <TrustSignal />
                 </div>
               </div>
 
@@ -553,12 +639,8 @@ const handleBookNow = () => {
             {/* Booking Card */}
             <div className="lg:col-span-1">
               <div className="sticky top-28 bg-card border border-border rounded-xl p-6 shadow-luxury-md">
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="font-display text-3xl font-medium">
-                    ${hotel.price}
-                  </span>
-                  <span className="text-muted-foreground">/night</span>
-                </div>
+                <PriceAnchor price={hotel.price} size="lg" className="mb-2" />
+                <ScarcityBadge hotel={hotel} className="mt-1" />
 
                 <div className="space-y-4 mb-6">
                   <div className="grid grid-cols-2 gap-3">
@@ -625,27 +707,39 @@ const handleBookNow = () => {
                   <span className="text-lg">${total}</span>
                 </div>
 
-                <button
+                <BookingCTA
                   onClick={handleBookNow}
-                  className="w-full btn-accent text-center"
-                >
-                  Reserve Now
-                </button>
-
-                <p className="text-xs text-center text-muted-foreground mt-4">
-                  You won't be charged yet
-                </p>
+                  label={bookingLabel}
+                  size="lg"
+                />
+                {priceMicrocopy && (
+                  <p className="mt-2 text-xs text-muted-foreground text-center">
+                    {priceMicrocopy}
+                  </p>
+                )}
+                {similarHotels.length > 0 && (
+                  <CompareAlternatives cityName={cityName} />
+                )}
+                <UrgencyNote
+                  hasFreeCancellation={Boolean(hotel.freeCancellation)}
+                  className="text-center"
+                />
               </div>
             </div>
           </div>
 
           {/* Similar Hotels Section */}
           {similarHotels.length > 0 && (
-            <div className="mt-16 pt-12 border-t border-border">
+            <div className="mt-16 pt-12 border-t border-border" id="similar-hotels">
               <h2 className="font-display text-2xl font-medium mb-8">Similar Hotels You May Like</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {similarHotels.map(similarHotel => (
-                  <HotelCard key={getHotelKey(similarHotel)} hotel={similarHotel} cityAverage={cityAverage} />
+                  <HotelCard
+                    key={getHotelKey(similarHotel)}
+                    hotel={similarHotel}
+                    cityAverage={cityAverage}
+                    budgetThreshold={budgetThreshold}
+                  />
                 ))}
               </div>
             </div>
@@ -679,6 +773,15 @@ const handleBookNow = () => {
 
       {/* SEO Footer for internal linking */}
       {knownCity && <SEOFooter currentCity={knownCity} currentHotel={hotel} />}
+
+      <ExitIntentModal
+        open={showExitIntent && Boolean(hotel.liteApiId)}
+        onViewDeal={() => {
+          setShowExitIntent(false);
+          handleBookNow();
+        }}
+        onDismiss={() => setShowExitIntent(false)}
+      />
 
       <Footer />
     </div>

@@ -141,7 +141,18 @@ export const useRevenueEngine = () => {
       const scoreA = statsA.revenue || 0;
       const scoreB = statsB.revenue || 0;
 
-      return scoreB - scoreA;
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA;
+      }
+
+      const bonusA =
+        (a.price && a.price > 0 ? 1 : 0) +
+        (a.liteApiId ? 1 : 0);
+      const bonusB =
+        (b.price && b.price > 0 ? 1 : 0) +
+        (b.liteApiId ? 1 : 0);
+
+      return bonusB - bonusA;
     });
   };
 

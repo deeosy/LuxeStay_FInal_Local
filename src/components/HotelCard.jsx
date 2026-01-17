@@ -1,10 +1,31 @@
 import { Link, useSearchParams, useLocation } from 'react-router-dom';
-import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, ExternalLink, Flame, DollarSign, Timer, TrendingUp } from 'lucide-react';
+import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, Flame, DollarSign, Timer, TrendingUp } from 'lucide-react';
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { trackAffiliateRedirect } from '@/utils/analytics';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
+import PriceAnchor from '@/components/PriceAnchor';
+import ScarcityBadge from '@/components/ScarcityBadge';
+import UrgencyNote from '@/components/UrgencyNote';
+import TrustSignal from '@/components/TrustSignal';
+import BookingCTA from '@/components/BookingCTA';
 
-const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
+const getBookingLabel = (rating, isBudget) => {
+  if (isBudget) return 'View Cheapest Option';
+  if (rating >= 4.5) return 'View Best Rated Deal';
+  return 'View Best Deal';
+};
+
+const getPriceMicrocopy = (price, average, city, isBudget) => {
+  if (!price || !average) return null;
+  if (isBudget) return 'One of the better-priced hotels in this area';
+  if (price < average) {
+    if (city) return `Great value for stays in ${city}`;
+    return 'Great value compared with similar stays';
+  }
+  return 'Priced similarly to other stays in this area';
+};
+
+const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const isDebug = searchParams.get('debug') === 'true';
@@ -39,7 +60,6 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
   
   const affiliateLink = `/go/hotel/${hotelId}?${affiliateParams}`;
 
-  // Conversion Badges
   const isHighDemand = (hotel.rating || 0) >= 4.6;
   const isBestValue = cityAverage && hotel.price && hotel.price < cityAverage;
   const isLimitedRooms = cityAverage && hotel.price && hotel.price < (cityAverage * 0.8);
@@ -65,6 +85,25 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
     window.location.href = affiliateLink;
   };
 
+  const isBudgetHotel =
+    typeof budgetThreshold === 'number' &&
+    hotel.price &&
+    hotel.price > 0 &&
+    hotel.price <= budgetThreshold;
+
+  const primaryCity =
+    hotel.city ||
+    (hotel.location && typeof hotel.location === 'string'
+      ? hotel.location.split(',')[0]
+      : null);
+
+  const bookingLabel = getBookingLabel(hotel.rating || 0, Boolean(isBudgetHotel));
+  const priceMicrocopy = getPriceMicrocopy(
+    hotel.price,
+    cityAverage,
+    primaryCity,
+    Boolean(isBudgetHotel)
+  );
 
   if (variant === 'featured') {
     return (
@@ -170,18 +209,22 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
               }`}
             />
           </button>
-          <div className="price-tag">
-            ${hotel.price}<span className="text-xs font-normal">/night</span>
-          </div>
+          <PriceAnchor price={hotel.price} size="sm" />
         </div>
       </Link>
       
       <div className="p-5 flex flex-col flex-grow">
         <Link to={linkTo} className="block mb-2">
-          <div className="flex items-center gap-1 mb-2">
-            <Star className="w-4 h-4 fill-accent text-accent" />
-            <span className="text-sm font-medium">{hotel.rating}</span>
-            <span className="text-sm text-muted-foreground">({hotel.reviews} reviews)</span>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-1">
+              <Star className="w-4 h-4 fill-accent text-accent" />
+              <span className="text-sm font-medium">{hotel.rating}</span>
+              {hotel.reviews && (
+                <span className="text-xs text-muted-foreground">
+                  Loved by {hotel.reviews}+ travelers
+                </span>
+              )}
+            </div>
           </div>
           <h3 className="font-display text-lg font-medium text-foreground mb-1 group-hover:text-accent transition-colors line-clamp-1">
             {hotel.name}
@@ -192,7 +235,6 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
           </div>
         </Link>
 
-        {/* Trust & Urgency Signals */}
         <div className="flex flex-wrap gap-2 mb-4">
            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
               <ShieldCheck className="w-3 h-3" />
@@ -208,7 +250,9 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
                 <span className="text-[10px] font-medium uppercase tracking-wide">Free Cancel</span>
              </div>
            )}
+           <ScarcityBadge hotel={hotel} />
         </div>
+        <TrustSignal className="mb-3" />
 
         <div className="flex items-center gap-4 text-sm text-muted-foreground pt-3 border-t border-border mt-auto">
           {hotel.sqft && (
@@ -223,15 +267,18 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage }) => {
           </div>
         </div>
         
-        {/* Affiliate Link / Call to Action */}
         <div className="mt-4 pt-3 border-t border-border">
-            <a 
-              href={affiliateLink} onClick={handleBookClick} rel="nofollow sponsored"
-              className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 px-4 rounded-lg font-medium hover:bg-primary/90 transition-colors text-sm"
-            >
-              View Deal
-              <ExternalLink className="w-3 h-3" />
-            </a>
+          <BookingCTA
+            href={affiliateLink}
+            onClick={handleBookClick}
+            label={bookingLabel}
+          />
+          {priceMicrocopy && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {priceMicrocopy}
+            </p>
+          )}
+          <UrgencyNote hasFreeCancellation={Boolean(hotel.freeCancellation)} />
         </div>
       </div>
     </div>

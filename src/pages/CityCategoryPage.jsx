@@ -94,6 +94,17 @@ const CityCategoryPage = () => {
     return filteredHotels.reduce((acc, h) => acc + (h.price || 0), 0) / filteredHotels.length;
   }, [filteredHotels]);
 
+  const budgetThreshold = useMemo(() => {
+    if (!filteredHotels.length) return null;
+    const prices = filteredHotels
+      .map(h => h.price || 0)
+      .filter(price => price > 0);
+    if (!prices.length) return null;
+    const sorted = [...prices].sort((a, b) => a - b);
+    const index = Math.floor((sorted.length - 1) * 0.3);
+    return sorted[index];
+  }, [filteredHotels]);
+
   // Dynamic Content Generation
   const pageTitle = isValid ? `${capitalize(type)} Hotels in ${city.cityName}` : 'Hotels';
   
@@ -204,7 +215,12 @@ const CityCategoryPage = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredHotels.slice(0, 12).map((hotel) => (
-              <HotelCard key={hotel.id} hotel={hotel} cityAverage={cityAverage} />
+              <HotelCard
+                key={hotel.id}
+                hotel={hotel}
+                cityAverage={cityAverage}
+                budgetThreshold={budgetThreshold}
+              />
             ))}
           </div>
         )}
