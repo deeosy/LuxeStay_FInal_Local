@@ -17,8 +17,8 @@ export async function handler(event) {
     const { city, hotel, price, page, checkIn, checkOut, guests } = params;
 
     // Initialize Supabase (Use Service Role Key for writing if available, else Anon)
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
     let supabase = null;
     if (supabaseUrl && supabaseKey) {

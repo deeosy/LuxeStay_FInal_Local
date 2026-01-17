@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
   }
 
   const supabaseUrl =
-    process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    process.env.SUPABASE_URL;
   if (!supabaseUrl) {
     res.status(500).json({ error: "Missing SUPABASE_URL" });
     return;

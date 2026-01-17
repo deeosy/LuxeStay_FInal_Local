@@ -11,8 +11,8 @@ const DOMAIN = "https://luxestayhaven.com";
 const TODAY = new Date().toISOString().split("T")[0];
 
 // Initialize Supabase (Ensure env vars are available)
-const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://ovigqjqqyqgqjqqyqgqj.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 const extractLocs = (xml) => {
@@ -178,7 +178,7 @@ ${urls.map(u => `
 
   const googleAdminToken = process.env.GOOGLE_INDEXING_ADMIN_TOKEN;
   // Also check if we have the Supabase URL and key from previous context or env
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://ovigqjqqyqgqjqqyqgqj.supabase.co"; // Placeholder or env
+  const supabaseUrl = process.env.SUPABASE_URL || "https://ovigqjqqyqgqjqqyqgqj.supabase.co"; // Placeholder or env
   // Actually, in the previous turn I saw the code used fetch to supabase function. 
   // I should check how the user wants it. The user said "Update sitemap generator so it... Automatically includes all generated pages".
   // I will keep the existing submission logic pattern but ensure it works. 

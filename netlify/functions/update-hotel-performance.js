@@ -4,8 +4,8 @@ export async function handler(event, context) {
   // Only allow POST or scheduled trigger (if Netlify supports it, usually via build hooks or external cron)
   // For now, we expose it as an endpoint we can call.
   
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return { statusCode: 500, body: 'Missing Supabase credentials' };

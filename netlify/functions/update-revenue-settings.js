@@ -5,9 +5,9 @@ export async function handler(event, context) {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_URL;
   // Use Service Role Key to bypass RLS
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     return { statusCode: 500, body: 'Missing Supabase credentials' };
