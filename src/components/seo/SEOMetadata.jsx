@@ -8,7 +8,8 @@ const SEOMetadata = ({
   canonical, 
   ogType = 'website', 
   ogImage,
-  schema 
+  schema,
+  indexable = true
 }) => {
   const location = useLocation();
   const currentUrl = canonical || `https://luxestayhaven.com${location.pathname}`;
@@ -19,7 +20,8 @@ const SEOMetadata = ({
       <Helmet>
         <title>{title}</title>
         <meta name="description" content={description} />
-        <link rel="canonical" href={currentUrl} />
+        {indexable && <link rel="canonical" href={currentUrl} />}
+        {!indexable && <meta name="robots" content="noindex,follow" />}
 
         {/* OpenGraph */}
         <meta property="og:title" content={title} />
@@ -35,7 +37,7 @@ const SEOMetadata = ({
         <meta name="twitter:image" content={ogImage || defaultImage} />
       </Helmet>
 
-      {schema && (Array.isArray(schema) ? schema.map((s, i) => <JsonLd key={i} item={s} />) : <JsonLd item={schema} />)}
+      {indexable && schema && (Array.isArray(schema) ? schema.map((s, i) => <JsonLd key={i} item={s} />) : <JsonLd item={schema} />)}
     </>
   );
 };

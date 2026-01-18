@@ -58,3 +58,37 @@ create index if not exists idx_affiliate_events_hotel_id on public.affiliate_eve
 create index if not exists idx_affiliate_events_city_slug on public.affiliate_events(city_slug);
 create index if not exists idx_affiliate_events_event_type on public.affiliate_events(event_type);
 create index if not exists idx_affiliate_events_created_at on public.affiliate_events(created_at);
+
+create table if not exists public.seo_index_queue (
+  id uuid default gen_random_uuid() primary key,
+  url text not null unique,
+  city_slug text,
+  status text default 'pending',
+  attempts integer default 0,
+  last_attempt_at timestamp with time zone,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_seo_index_queue_status on public.seo_index_queue(status);
+create index if not exists idx_seo_index_queue_city_slug on public.seo_index_queue(city_slug);
+create index if not exists idx_seo_index_queue_created_at on public.seo_index_queue(created_at);
+
+create table if not exists public.seo_city_registry (
+  city_slug text primary key,
+  priority text default 'normal',
+  is_frozen boolean default false,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_seo_city_registry_priority on public.seo_city_registry(priority);
+create index if not exists idx_seo_city_registry_is_frozen on public.seo_city_registry(is_frozen);
+
+create table if not exists public.seo_system_config (
+  key text primary key,
+  value jsonb,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+insert into public.seo_system_config (key, value)
+values ('seo_enabled', '{"enabled": true}'::jsonb)
+on conflict (key) do nothing;

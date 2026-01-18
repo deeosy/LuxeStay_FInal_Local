@@ -9,10 +9,12 @@ import SEOMetadata from '@/components/seo/SEOMetadata';
 import { useIndexing } from '@/hooks/useIndexing';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 import { Loader2 } from 'lucide-react';
+import { useSeoEligibility } from '@/hooks/useSeoEligibility';
 
 const CityHotels = () => {
   const { citySlug, filterSlug } = useParams();
   const city = getCityBySlug(citySlug);
+  const { isSeoEligibleCity } = useSeoEligibility(citySlug);
 
   const searchParams = useMemo(() => {
     if (!city) return { enabled: false };
@@ -152,8 +154,9 @@ const CityHotels = () => {
       <SEOMetadata
         title={pageTitle}
         description={pageDescription}
-        canonical={pageUrl}
+        canonical={isSeoEligibleCity ? pageUrl : undefined}
         ogType="website"
+        indexable={isSeoEligibleCity}
       />
       <Header />
 
