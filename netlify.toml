@@ -4,3 +4,11 @@ to = "/.netlify/functions/go-hotel/:splat"
 status = 302
 force = true
 
+[functions."process-seo-index-queue"]
+  schedule = "*/15 * * * *"
+
+[functions."enqueue-seo-city-urls"]
+  schedule = "0 3 * * *"      # same cron as before
+
+[functions."process-indexing-queue"]
+  schedule = "@hourly"
