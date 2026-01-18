@@ -1,4 +1,5 @@
 import { Link, useSearchParams, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, Flame, DollarSign, Timer, TrendingUp } from 'lucide-react';
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { trackAffiliateRedirect } from '@/utils/analytics';
@@ -8,6 +9,7 @@ import ScarcityBadge from '@/components/ScarcityBadge';
 import UrgencyNote from '@/components/UrgencyNote';
 import TrustSignal from '@/components/TrustSignal';
 import BookingCTA from '@/components/BookingCTA';
+import { trackAffiliateEvent } from '@/utils/affiliateEvents';
 
 const getBookingLabel = (rating, isBudget) => {
   if (isBudget) return 'View Cheapest Option';
@@ -64,7 +66,29 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
   const isBestValue = cityAverage && hotel.price && hotel.price < cityAverage;
   const isLimitedRooms = cityAverage && hotel.price && hotel.price < (cityAverage * 0.8);
 
+  const pathSegments = location.pathname.split('/').filter(Boolean);
+  let citySlugFromPath = null;
+  let filterSlugFromPath = null;
+
+  if (pathSegments[0] === 'hotels') {
+    citySlugFromPath = pathSegments[1] || null;
+    filterSlugFromPath = pathSegments[2] || null;
+  }
+
+  const citySlugForEvent = citySlugFromPath || hotel.citySlug || null;
+  const filterSlugForEvent = filterSlugFromPath || null;
+
   const favorited = isFavorite(hotelId);
+
+  useEffect(() => {
+    trackAffiliateEvent({
+      eventType: 'hotel_impression',
+      hotelId,
+      citySlug: citySlugForEvent,
+      filterSlug: filterSlugForEvent,
+      pageUrl: currentPath,
+    });
+  }, [hotelId, citySlugForEvent, filterSlugForEvent, currentPath]);
 
   const handleFavoriteClick = (e) => {
     e.preventDefault(); // Prevent navigation
@@ -80,6 +104,14 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
       hotel_id: hotelId,
       city: seoCity || hotel.city,
       page_path: currentPath
+    });
+
+    trackAffiliateEvent({
+      eventType: 'view_deal_click',
+      hotelId,
+      citySlug: citySlugForEvent,
+      filterSlug: filterSlugForEvent,
+      pageUrl: currentPath,
     });
 
     window.location.href = affiliateLink;

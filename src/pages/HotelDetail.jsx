@@ -8,6 +8,7 @@ import { useLiteApiHotelDetail, useLiteApiSearch } from '@/hooks/useLiteApiHotel
 import { cities } from '@/data/cities';
 import useBookingStore from '@/stores/useBookingStore';
 import { trackAffiliateRedirect, trackBookingClick, trackHotelView } from '@/utils/analytics';
+import { trackAffiliateEvent } from '@/utils/affiliateEvents';
 import {
   Star,
   MapPin,
@@ -94,6 +95,7 @@ const HotelDetail = () => {
   useIndexing(pageUrl);
 
   const isDebug = searchParams.get('debug') === 'true';
+  const citySlugFromParams = searchParams.get('city');
   
   // Read booking state from global store
   const { 
@@ -132,7 +134,6 @@ const HotelDetail = () => {
   // Use static hotel or LiteAPI hotel
   const hotel = staticHotel || liteApiHotel;
 
-  // Sync hotel to store on load
   useEffect(() => {
     if (hotel) {
       setSelectedHotel(hotel);
@@ -142,8 +143,20 @@ const HotelDetail = () => {
         city: hotel.city || hotel.location,
         price: hotel.price
       });
+
+      const hotelIdForEvent = hotel.liteApiId || hotel.id;
+
+      if (hotelIdForEvent) {
+        trackAffiliateEvent({
+          eventType: 'hotel_impression',
+          hotelId: hotelIdForEvent,
+          citySlug: citySlugFromParams || hotel.citySlug || null,
+          filterSlug: null,
+          pageUrl: `${location.pathname}${location.search}`,
+        });
+      }
     }
-  }, [hotel, setSelectedHotel]);
+  }, [hotel, setSelectedHotel, citySlugFromParams, location]);
 
   // Determine city for similar hotels
   const cityForSearch = hotel?.city || hotel?.citySlug || (hotel?.location ? hotel.location.split(',')[0] : '');
@@ -272,6 +285,19 @@ const HotelDetail = () => {
       if (hasShownExit || hasClicked) return;
 
       sessionStorage.setItem(exitKey, '1');
+
+      const hotelIdForEvent = hotel.liteApiId || hotel.id;
+
+      if (hotelIdForEvent) {
+        trackAffiliateEvent({
+          eventType: 'exit_intent_view',
+          hotelId: hotelIdForEvent,
+          citySlug: citySlugFromParams || hotel.citySlug || null,
+          filterSlug: null,
+          pageUrl: `${location.pathname}${location.search}`,
+        });
+      }
+
       setShowExitIntent(true);
     };
 
@@ -279,7 +305,7 @@ const HotelDetail = () => {
     return () => {
       document.removeEventListener('mouseout', handleMouseOut);
     };
-  }, [hotel, canShowExit]);
+  }, [hotel, canShowExit, citySlugFromParams, location]);
 
   if (isLiteApiHotel && loading) {
     return (
@@ -343,6 +369,14 @@ const handleBookNow = () => {
     guests,
     rooms,
     source: hotel.liteApiId ? 'liteapi' : 'static'
+  });
+
+  trackAffiliateEvent({
+    eventType: 'view_deal_click',
+    hotelId: hotelIdForUrl,
+    citySlug: citySlugFromParams || hotel.citySlug || null,
+    filterSlug: null,
+    pageUrl: `${location.pathname}${location.search}`,
   });
 
   // 👉 LITEAPI hotels MUST go through monetization
@@ -794,6 +828,18 @@ const handleBookNow = () => {
       <ExitIntentModal
         open={showExitIntent && Boolean(hotel.liteApiId)}
         onViewDeal={() => {
+          const hotelIdForEvent = hotel.liteApiId || hotel.id;
+
+          if (hotelIdForEvent) {
+            trackAffiliateEvent({
+              eventType: 'exit_intent_click',
+              hotelId: hotelIdForEvent,
+              citySlug: citySlugFromParams || hotel.citySlug || null,
+              filterSlug: null,
+              pageUrl: `${location.pathname}${location.search}`,
+            });
+          }
+
           setShowExitIntent(false);
           handleBookNow();
         }}

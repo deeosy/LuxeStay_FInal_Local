@@ -23,6 +23,10 @@ const AdminAffiliate = () => {
     topRevenueCities: [],
     topRevenueHotels: []
   });
+  const [cityFunnel, setCityFunnel] = useState([]);
+  const [exitIntentStats, setExitIntentStats] = useState([]);
+  const [leakHotels, setLeakHotels] = useState([]);
+  const [analyticsError, setAnalyticsError] = useState(null);
 
   // Revenue Engine Hook
   const { globalStats, getHotelStats, refresh } = useRevenueEngine();
@@ -148,6 +152,38 @@ const AdminAffiliate = () => {
           month: monthRev,
           epc: count > 0 ? totalRev / count : 0
         });
+      }
+
+      try {
+        setAnalyticsError(null);
+
+        let token = '';
+        if (typeof window !== 'undefined' && window.localStorage) {
+          token = window.localStorage.getItem('luxe_admin_dashboard_token') || '';
+        }
+
+        const headers = {};
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+
+        const response = await fetch('/.netlify/functions/admin-affiliate-analytics', {
+          headers
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Analytics request failed: ${response.status} ${text}`);
+        }
+
+        const data = await response.json();
+
+        setCityFunnel(Array.isArray(data.cityFunnel) ? data.cityFunnel : []);
+        setExitIntentStats(Array.isArray(data.exitIntent) ? data.exitIntent : []);
+        setLeakHotels(Array.isArray(data.leakHotels) ? data.leakHotels : []);
+      } catch (error) {
+        console.error('Error fetching affiliate analytics:', error);
+        setAnalyticsError('Failed to load affiliate funnel analytics');
       }
 
     } catch (error) {
@@ -414,6 +450,124 @@ const AdminAffiliate = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {analyticsError && (
+          <div className="mt-6 text-sm text-red-600">
+            {analyticsError}
+          </div>
+        )}
+
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold">City Funnel</h2>
+              <p className="text-xs text-gray-500">Impressions and clicks by city slug.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-600 font-medium">
+                  <tr>
+                    <th className="px-6 py-3">City</th>
+                    <th className="px-6 py-3 text-right">Impressions</th>
+                    <th className="px-6 py-3 text-right">Clicks</th>
+                    <th className="px-6 py-3 text-right">CTR</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {cityFunnel.map((row) => (
+                    <tr key={row.city_slug || 'unknown'}>
+                      <td className="px-6 py-3 font-medium text-gray-900">{row.city_slug || '-'}</td>
+                      <td className="px-6 py-3 text-right text-gray-700">{row.impressions ?? 0}</td>
+                      <td className="px-6 py-3 text-right text-gray-700">{row.clicks ?? 0}</td>
+                      <td className="px-6 py-3 text-right text-gray-700">
+                        {row.ctr ? `${(row.ctr * 100).toFixed(1)}%` : '0.0%'}
+                      </td>
+                    </tr>
+                  ))}
+                  {cityFunnel.length === 0 && (
+                    <tr>
+                      <td className="px-6 py-3 text-gray-500" colSpan={4}>
+                        No city funnel data yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold">Exit Intent Performance</h2>
+              <p className="text-xs text-gray-500">Exit-intent views and clicks by city slug.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-600 font-medium">
+                  <tr>
+                    <th className="px-6 py-3">City</th>
+                    <th className="px-6 py-3 text-right">Views</th>
+                    <th className="px-6 py-3 text-right">Clicks</th>
+                    <th className="px-6 py-3 text-right">Conversion</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {exitIntentStats.map((row) => (
+                    <tr key={row.city_slug || 'unknown'}>
+                      <td className="px-6 py-3 font-medium text-gray-900">{row.city_slug || '-'}</td>
+                      <td className="px-6 py-3 text-right text-gray-700">{row.views ?? 0}</td>
+                      <td className="px-6 py-3 text-right text-gray-700">{row.clicks ?? 0}</td>
+                      <td className="px-6 py-3 text-right text-gray-700">
+                        {row.ctr ? `${(row.ctr * 100).toFixed(1)}%` : '0.0%'}
+                      </td>
+                    </tr>
+                  ))}
+                  {exitIntentStats.length === 0 && (
+                    <tr>
+                      <td className="px-6 py-3 text-gray-500" colSpan={4}>
+                        No exit-intent data yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold">Leak Hotels</h2>
+              <p className="text-xs text-gray-500">Hotels with impressions but no clicks.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-600 font-medium">
+                  <tr>
+                    <th className="px-6 py-3">Hotel ID</th>
+                    <th className="px-6 py-3">City</th>
+                    <th className="px-6 py-3 text-right">Impressions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {leakHotels.map((row) => (
+                    <tr key={row.hotel_id}>
+                      <td className="px-6 py-3 font-medium text-gray-900">{row.hotel_id}</td>
+                      <td className="px-6 py-3 text-gray-700">{row.city_slug || '-'}</td>
+                      <td className="px-6 py-3 text-right text-gray-700">{row.impressions ?? 0}</td>
+                    </tr>
+                  ))}
+                  {leakHotels.length === 0 && (
+                    <tr>
+                      <td className="px-6 py-3 text-gray-500" colSpan={3}>
+                        No leak hotels identified yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </main>

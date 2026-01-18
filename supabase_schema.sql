@@ -41,3 +41,20 @@ create policy "Allow read access to authenticated users"
 create index if not exists idx_affiliate_clicks_created_at on public.affiliate_clicks(created_at);
 create index if not exists idx_affiliate_clicks_city on public.affiliate_clicks(city);
 create index if not exists idx_affiliate_clicks_hotel_id on public.affiliate_clicks(hotel_id);
+
+create table if not exists public.affiliate_events (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  hotel_id text not null,
+  city_slug text,
+  filter_slug text,
+  page_url text,
+  event_type text not null
+);
+
+alter table public.affiliate_events enable row level security;
+
+create index if not exists idx_affiliate_events_hotel_id on public.affiliate_events(hotel_id);
+create index if not exists idx_affiliate_events_city_slug on public.affiliate_events(city_slug);
+create index if not exists idx_affiliate_events_event_type on public.affiliate_events(event_type);
+create index if not exists idx_affiliate_events_created_at on public.affiliate_events(created_at);

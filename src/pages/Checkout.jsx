@@ -9,6 +9,7 @@ import { buildAffiliateUrl } from '@/utils/affiliateLinks';
 import { Check, CreditCard, Lock, ChevronLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { trackAffiliateRedirect, trackBookingClick, trackHotelView } from '@/utils/analytics';
+import { trackAffiliateEvent } from '@/utils/affiliateEvents';
 
 // Helper to format date for display
 const formatDate = (dateString) => {
@@ -202,6 +203,17 @@ const Checkout = () => {
       guests,
       rooms,
     });
+
+    const hotelIdForEvent = selectedHotel.id || selectedHotel.liteApiId;
+
+    if (hotelIdForEvent) {
+      trackAffiliateEvent({
+        eventType: 'view_deal_click',
+        hotelId: hotelIdForEvent,
+        citySlug: seoCity || null,
+        filterSlug: null,
+      });
+    }
 
     // Show toast and redirect to affiliate partner
     toast.success('Redirecting to our booking partner...');

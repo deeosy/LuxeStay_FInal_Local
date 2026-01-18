@@ -18,6 +18,7 @@ import Destinations from "./pages/Destinations";
 import CityCategoryPage from "./pages/CityCategoryPage";
 import PoiLandingPage from "./pages/PoiLandingPage";
 import AdminAffiliate from "./pages/AdminAffiliate";
+import CityHotels from "./pages/CityHotels";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,8 @@ const App = () => (
             <Route path="/" element={<Home />} />
             <Route path="/search" element={<SearchResults />} />
             <Route path="/destinations" element={<Destinations />} />
+            <Route path="/hotels/:citySlug" element={<CityHotels />} />
+            <Route path="/hotels/:citySlug/:filterSlug" element={<CityHotels />} />
             <Route path="/hotels-in/:citySlug" element={<DestinationPage />} />
             <Route path="/hotels-in-:citySlug" element={<DestinationPage />} />
             <Route path="/hotels-in-:citySlug-:districtSlug" element={<DestinationPage />} />

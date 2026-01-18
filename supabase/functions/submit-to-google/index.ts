@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0?dts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -132,18 +133,88 @@ const normalizeUrl = (value: unknown) => {
   }
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+type PublishResult = {
+  type: "URL_UPDATED" | "URL_DELETED";
+  submitted: number;
+  success: number;
+  failed: number;
+  results: Array<{ url: string; ok: boolean; status: number; body: string }>;
+};
 
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+type IndexingQueueRow = {
+  id: string;
+  url: string;
+  submitted: boolean;
+  attempts: number;
+  last_attempt_at: string | null;
+  created_at: string;
+};
 
+const publishUrls = async (
+  urls: string[],
+  type: "URL_UPDATED" | "URL_DELETED",
+): Promise<PublishResult> => {
+  const accessToken = await getAccessToken();
+
+  const concurrency = 5;
+  const results: Array<{ url: string; ok: boolean; status: number; body: string }> = [];
+
+  let index = 0;
+  const workers = Array.from({ length: Math.min(concurrency, urls.length) }).map(
+    async () => {
+      while (true) {
+        const current = urls[index++];
+        if (!current) break;
+        try {
+          const res = await fetch(INDEXING_PUBLISH_URL, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json; charset=utf-8",
+            },
+            body: JSON.stringify({ url: current, type }),
+          });
+          const text = await res.text();
+          results.push({
+            url: current,
+            ok: res.ok,
+            status: res.status,
+            body: text.slice(0, 2000),
+          });
+        } catch (err) {
+          results.push({
+            url: current,
+            ok: false,
+            status: 0,
+            body: String(err).slice(0, 2000),
+          });
+        }
+      }
+    },
+  );
+
+  await Promise.all(workers);
+  results.sort((a, b) => a.url.localeCompare(b.url));
+
+  const summary = results.reduce(
+    (acc, r) => {
+      if (r.ok) acc.success += 1;
+      else acc.failed += 1;
+      return acc;
+    },
+    { success: 0, failed: 0 },
+  );
+
+  return {
+    type,
+    submitted: urls.length,
+    success: summary.success,
+    failed: summary.failed,
+    results,
+  };
+};
+
+const handleManual = async (req: Request): Promise<Response> => {
   const expectedToken = Deno.env.get("GOOGLE_INDEXING_ADMIN_TOKEN");
   const providedToken = parseBearer(req.headers.get("authorization"));
   if (!expectedToken || !providedToken || providedToken !== expectedToken) {
@@ -184,64 +255,135 @@ serve(async (req) => {
     });
   }
 
-  const accessToken = await getAccessToken();
+  const result = await publishUrls(unique, type);
 
-  const concurrency = 5;
-  const results: Array<{ url: string; ok: boolean; status: number; body: string }> = [];
+  return new Response(
+    JSON.stringify(result),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+};
 
-  let index = 0;
-  const workers = Array.from({ length: Math.min(concurrency, unique.length) }).map(async () => {
-    while (true) {
-      const current = unique[index++];
-      if (!current) break;
-      try {
-        const res = await fetch(INDEXING_PUBLISH_URL, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json; charset=utf-8",
-          },
-          body: JSON.stringify({ url: current, type }),
-        });
-        const text = await res.text();
-        results.push({
-          url: current,
-          ok: res.ok,
-          status: res.status,
-          body: text.slice(0, 2000),
-        });
-      } catch (err) {
-        results.push({
-          url: current,
-          ok: false,
-          status: 0,
-          body: String(err).slice(0, 2000),
-        });
-      }
-    }
+const handleWorker = async (): Promise<Response> => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+  if (!supabaseUrl || !serviceKey) {
+    return new Response(
+      JSON.stringify({
+        mode: "worker",
+        processed: 0,
+        success: 0,
+        failed: 0,
+        error: "Server not configured for worker mode",
+      }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const supabase = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false },
   });
 
-  await Promise.all(workers);
-  results.sort((a, b) => a.url.localeCompare(b.url));
+  const { data, error } = await supabase
+    .from<IndexingQueueRow>("indexing_queue")
+    .select("*")
+    .eq("submitted", false)
+    .lt("attempts", 3)
+    .order("created_at", { ascending: true })
+    .limit(5);
 
-  const summary = results.reduce(
-    (acc, r) => {
-      if (r.ok) acc.success += 1;
-      else acc.failed += 1;
-      return acc;
-    },
-    { success: 0, failed: 0 },
-  );
+  if (error || !data || data.length === 0) {
+    return new Response(
+      JSON.stringify({
+        mode: "worker",
+        processed: 0,
+        success: 0,
+        failed: 0,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  const now = new Date().toISOString();
+
+  const normalizedById = new Map<string, string | null>();
+  for (const row of data) {
+    normalizedById.set(row.id, normalizeUrl(row.url));
+  }
+
+  const urls = Array.from(new Set(
+    Array.from(normalizedById.values()).filter(
+      (u): u is string => typeof u === "string",
+    ),
+  ));
+
+  let publishResult: PublishResult | null = null;
+  if (urls.length > 0) {
+    try {
+      publishResult = await publishUrls(urls, "URL_UPDATED");
+    } catch (_err) {
+      publishResult = null;
+    }
+  }
+
+  let successCount = 0;
+  let failedCount = 0;
+
+  for (const row of data) {
+    const normalized = normalizedById.get(row.id);
+    const resultForRow = normalized && publishResult
+      ? publishResult.results.find((r) => r.url === normalized) || null
+      : null;
+
+    const ok = Boolean(resultForRow && resultForRow.ok);
+    if (ok) successCount += 1;
+    else failedCount += 1;
+
+    const updates = {
+      attempts: ok ? row.attempts : row.attempts + 1,
+      last_attempt_at: now,
+      submitted: ok,
+    };
+
+    await supabase
+      .from<IndexingQueueRow>("indexing_queue")
+      .update(updates)
+      .eq("id", row.id);
+  }
 
   return new Response(
     JSON.stringify({
-      type,
-      submitted: unique.length,
-      success: summary.success,
-      failed: summary.failed,
-      results,
+      mode: "worker",
+      processed: data.length,
+      success: successCount,
+      failed: failedCount,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
-});
+};
 
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  if (req.method === "GET") {
+    return await handleWorker();
+  }
+
+  if (req.method === "POST") {
+    const contentLength = req.headers.get("content-length");
+    const isEmptyBody = !contentLength || contentLength === "0";
+
+    if (isEmptyBody) {
+      return await handleWorker();
+    }
+
+    return await handleManual(req);
+  }
+
+  return new Response(JSON.stringify({ error: "Method not allowed" }), {
+    status: 405,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+});
