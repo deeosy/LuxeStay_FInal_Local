@@ -48,6 +48,8 @@ const AppLifecycle = () => {
     trackPageView(location.pathname + location.search);
   }, [location]);
 
+  const clearAuthState = useAuthStore((state) => state.clearAuthState);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -74,8 +76,13 @@ const AppLifecycle = () => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
+
+      if (event === 'SIGNED_OUT') {
+        clearAuthState();
+        return;
+      }
 
       setAuthState({
         user: session?.user || null,
@@ -93,7 +100,7 @@ const AppLifecycle = () => {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [setAuthState, loadSavedHotelIds]);
+  }, [setAuthState, loadSavedHotelIds, clearAuthState]);
 
   return null;
 };

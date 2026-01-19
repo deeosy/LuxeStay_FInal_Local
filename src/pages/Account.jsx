@@ -84,6 +84,11 @@ const AccountContent = () => {
                   </div>
                   <h2 className="font-medium text-lg">{userInfo.name}</h2>
                   <p className="text-sm text-muted-foreground">{userInfo.email}</p>
+                  {authUser && !authUser.email_confirmed_at && (
+                    <div className="mt-3 px-3 py-2 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 text-xs rounded-md border border-yellow-500/20">
+                      Verify your email to update account details.
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground mt-2">
                     Member since {userInfo.memberSince}
                   </p>
