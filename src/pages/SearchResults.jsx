@@ -6,6 +6,7 @@ import HotelCard from '@/components/HotelCard';
 import { allHotels, destinations } from '@/data/hotels';
 import { cities } from '@/data/cities';
 import { useLiteApiSearch } from '@/hooks/useLiteApiHotels';
+import { useSavedHotelIds } from '@/hooks/useSavedHotelIds';
 import useBookingStore from '@/stores/useBookingStore';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 import { Search, SlidersHorizontal, MapPin, X, Calendar, Users, Loader2, Wifi, Waves, Sparkles, Dumbbell, Utensils, Car, Wind, Coffee } from 'lucide-react';
@@ -196,6 +197,8 @@ if (targetDestination) {
 
   const { hotels: liteApiHotels, loading: liteApiLoading, error: liteApiError, source } =
   useLiteApiSearch(liteSearchParams);
+  
+  const { isHotelSaved } = useSavedHotelIds();
 
 
   const filteredHotels = useMemo(() => {
@@ -217,6 +220,17 @@ if (targetDestination) {
     results = results.filter(
       (hotel) => hotel.price >= priceRange[0] && hotel.price <= priceRange[1]
     );
+
+    // Sort: Saved hotels first, then by price
+    results.sort((a, b) => {
+      const aSaved = isHotelSaved(a.liteApiId || a.id);
+      const bSaved = isHotelSaved(b.liteApiId || b.id);
+      
+      if (aSaved && !bSaved) return -1;
+      if (!aSaved && bSaved) return 1;
+      
+      return a.price - b.price;
+    });
 
     console.log('Hotels after filtering:', results.length);
 

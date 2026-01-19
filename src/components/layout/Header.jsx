@@ -56,7 +56,7 @@ const Header = () => {
               </Link>
             ) : (
               <Link
-                to="/register"
+                to="/login"
                 className="btn-primary text-sm"
               >
                 Sign In
@@ -98,7 +98,7 @@ const Header = () => {
                   </Link>
                 ) : (
                   <Link
-                    to="/register"
+                    to="/login"
                     className="flex-1 text-center py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium"
                     onClick={() => setIsMenuOpen(false)}
                   >

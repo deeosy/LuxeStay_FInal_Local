@@ -22,8 +22,16 @@ const BookingCTA = ({
     return (
       <a
         href={href}
-        onClick={onClick}
-        rel="nofollow sponsored"
+        onClick={(e) => {
+          // Guardrail: Always allow click through, even if onClick (analytics) fails
+          try {
+             if (onClick) onClick(e);
+          } catch (err) {
+             console.error('Booking click analytics failed (non-blocking)', err);
+          }
+        }}
+        target="_blank"
+        rel="noopener noreferrer nofollow sponsored"
         className={`w-full ${base} ${padding} ${className}`}
       >
         {label}

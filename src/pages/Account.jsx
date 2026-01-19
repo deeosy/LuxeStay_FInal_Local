@@ -12,6 +12,11 @@ import {
   LogOut,
   MapPin,
   Star,
+  Search,
+  ArrowRight,
+  ShieldCheck,
+  AlertTriangle,
+  TrendingUp,
 } from 'lucide-react';
 import AuthGate from '@/components/auth/AuthGate';
 import useFavoritesStore from '@/stores/useFavoritesStore';
@@ -83,13 +88,23 @@ const AccountContent = () => {
                     <User className="w-10 h-10 text-muted-foreground" />
                   </div>
                   <h2 className="font-medium text-lg">{userInfo.name}</h2>
-                  <p className="text-sm text-muted-foreground">{userInfo.email}</p>
-                  {authUser && !authUser.email_confirmed_at && (
-                    <div className="mt-3 px-3 py-2 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 text-xs rounded-md border border-yellow-500/20">
+                  <p className="text-sm text-muted-foreground mb-3">{userInfo.email}</p>
+                  
+                  {authUser && !authUser.email_confirmed_at ? (
+                    <div className="mt-3 px-3 py-2 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 text-xs rounded-md border border-yellow-500/20 text-left">
+                       <div className="flex items-start gap-2 mb-1">
+                          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                          <span className="font-semibold">Action Required</span>
+                       </div>
                       Verify your email to update account details.
                     </div>
+                  ) : (
+                     <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium rounded-full border border-green-500/20">
+                        <ShieldCheck className="w-3 h-3" /> Verified Member
+                     </div>
                   )}
-                  <p className="text-xs text-muted-foreground mt-2">
+
+                  <p className="text-xs text-muted-foreground mt-4">
                     Member since {userInfo.memberSince}
                   </p>
                 </div>
@@ -125,12 +140,27 @@ const AccountContent = () => {
             <div className="lg:col-span-3 space-y-8">
               {/* Welcome */}
               <div className="bg-card border border-border rounded-xl p-8">
-                <h1 className="font-display text-2xl font-medium mb-2">
-                  Welcome back, {userInfo.name.split(' ')[0]}!
-                </h1>
-                <p className="text-muted-foreground">
-                  Manage your bookings, saved hotels, and account settings.
-                </p>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                   <div>
+                    <h1 className="font-display text-2xl font-medium mb-2">
+                      Welcome back, {userInfo.name.split(' ')[0]}!
+                    </h1>
+                    <p className="text-muted-foreground">
+                      Manage your bookings, saved hotels, and account settings.
+                    </p>
+                   </div>
+                   {authUser && !authUser.email_confirmed_at && (
+                     <div className="flex items-center gap-3 p-3 bg-blue-50 text-blue-800 rounded-lg border border-blue-100 max-w-sm">
+                        <div className="p-2 bg-blue-100 rounded-full shrink-0">
+                           <ShieldCheck className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                           <p className="text-sm font-semibold">Verify your account</p>
+                           <p className="text-xs text-blue-700/80">Verified accounts get faster support & saved access.</p>
+                        </div>
+                     </div>
+                   )}
+                </div>
               </div>
 
               {/* Upcoming Bookings */}
@@ -250,7 +280,7 @@ const AccountContent = () => {
 
               {/* Saved Hotels */}
               <div className="bg-card border border-border rounded-xl p-6">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-4">
                   <h2 className="font-display text-xl font-medium">
                     Saved Hotels
                   </h2>
@@ -261,12 +291,40 @@ const AccountContent = () => {
                     Browse More
                   </Link>
                 </div>
+
+                {/* Step 78: Saved hotels revisit nudges */}
+                {!loading && savedHotelIds.length > 0 && (
+                   <div className="mb-6 flex items-center gap-2 p-3 bg-amber-50 text-amber-800 rounded-lg text-sm border border-amber-100">
+                      <TrendingUp className="w-4 h-4 shrink-0" />
+                      <span>Prices may change — check availability before rooms sell out.</span>
+                   </div>
+                )}
+
                 {loading ? (
                   <p className="text-sm text-muted-foreground">Loading saved hotels...</p>
                 ) : savedHotelIds.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    You have not saved any hotels yet.
-                  </p>
+                  <div className="text-center py-12 border border-dashed border-border rounded-lg bg-secondary/10">
+                    <div className="w-12 h-12 bg-background rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-border">
+                      <Heart className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <h3 className="font-medium text-lg mb-2">No saved hotels yet</h3>
+                    <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-6">
+                      Start exploring amazing destinations and save your favorite stays for later.
+                    </p>
+                    
+                    {/* Step 80: Auth-aware empty state actions */}
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <Link to="/search" className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors">
+                        Search by city
+                      </Link>
+                      <Link to="/search?sort=rating" className="px-4 py-2 bg-secondary text-secondary-foreground border border-border rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
+                        View top rated
+                      </Link>
+                      <Link to="/search?sort=price" className="px-4 py-2 bg-secondary text-secondary-foreground border border-border rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors">
+                        Browse best value
+                      </Link>
+                    </div>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {savedHotelIds.map((hotelId) => {
@@ -295,7 +353,7 @@ const AccountContent = () => {
                         <Link
                           key={hotelId}
                           to={`/hotel/${hotel.id}`}
-                          className="flex gap-4 p-3 rounded-lg hover:bg-secondary/50 transition-colors"
+                          className="flex gap-4 p-3 rounded-lg hover:bg-secondary/50 transition-colors group"
                         >
                           <img
                             src={hotel.image}
@@ -303,17 +361,26 @@ const AccountContent = () => {
                             className="w-20 h-20 rounded-lg object-cover"
                           />
                           <div>
-                            <h3 className="font-medium text-sm mb-1">{hotel.name}</h3>
+                            <h3 className="font-medium text-sm mb-1 group-hover:text-accent transition-colors">{hotel.name}</h3>
                             <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
                               <MapPin className="w-3 h-3" />
                               {hotel.location}
                             </div>
-                            <p className="text-sm font-medium">
-                              ${hotel.price}
-                              <span className="text-xs text-muted-foreground font-normal">
-                                /night
+                            
+                            {/* Step 79: Price anchoring */}
+                            {hotel.price ? (
+                              <p className="text-sm font-medium">
+                                <span className="text-xs text-muted-foreground font-normal">From </span>
+                                ${hotel.price}
+                                <span className="text-xs text-muted-foreground font-normal">
+                                  /night
+                                </span>
+                              </p>
+                            ) : (
+                              <span className="text-sm font-medium text-accent">
+                                Check availability
                               </span>
-                            </p>
+                            )}
                           </div>
                         </Link>
                       );

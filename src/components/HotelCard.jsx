@@ -1,10 +1,10 @@
 import { Link, useSearchParams, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, Flame, DollarSign, Timer, TrendingUp } from 'lucide-react';
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { trackAffiliateRedirect } from '@/utils/analytics';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
-import PriceAnchor from '@/components/PriceAnchor';
+import PriceAnchor from '@/components/PriceAnchor'; 
 import ScarcityBadge from '@/components/ScarcityBadge';
 import UrgencyNote from '@/components/UrgencyNote';
 import TrustSignal from '@/components/TrustSignal';
@@ -13,13 +13,15 @@ import { trackAffiliateEvent } from '@/utils/affiliateEvents';
 import useAuthStore from '@/stores/useAuthStore';
 import { useSavedHotelIds } from '@/hooks/useSavedHotelIds';
 
-const getBookingLabel = (rating, isBudget) => {
+const getBookingLabel = (rating, isBudget, price) => {
+  if (!price) return 'Check Availability';
   if (isBudget) return 'View Cheapest Option';
   if (rating >= 4.5) return 'View Best Rated Deal';
   return 'View Best Deal';
 };
 
-const getPriceMicrocopy = (price, average, city, isBudget) => {
+const getPriceMicrocopy = (price, average, city, isBudget, favorited) => {
+  if (favorited) return 'Still interested?';
   if (!price || !average) return null;
   if (isBudget) return 'One of the better-priced hotels in this area';
   if (price < average) {
@@ -38,7 +40,11 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
   const user = useAuthStore((state) => state.user);
   const initialized = useAuthStore((state) => state.initialized);
   const { isHotelSaved, toggleHotelSaved } = useSavedHotelIds();
+  const [isToggling, setIsToggling] = useState(false);
+  const impressionFired = useRef(false);
   const hotelId = hotel.liteApiId || hotel.id;
+
+  const favorited = isHotelSaved(hotelId);
 
   const { getBadges } = useRevenueEngine();
   const revenueBadges = getBadges(hotelId);
@@ -57,9 +63,9 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
   const guests = searchParams.get('guests');
 
   const affiliateParams = new URLSearchParams({
-      city: seoCity || hotel.city || '',
-      hotel: hotel.name || '',
-      price: hotel.price ? hotel.price.toString() : '',
+      city: seoCity || hotel.city || 'unknown',
+      hotel: hotel.name || 'hotel',
+      price: hotel.price ? hotel.price.toString() : '0',
       page: currentPath,
       checkIn: checkIn || '',
       checkOut: checkOut || '',
@@ -84,8 +90,6 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
   const citySlugForEvent = citySlugFromPath || hotel.citySlug || null;
   const filterSlugForEvent = filterSlugFromPath || null;
 
-  const favorited = isHotelSaved(hotelId);
-
   useEffect(() => {
     trackAffiliateEvent({
       eventType: 'hotel_impression',
@@ -94,27 +98,48 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
       filterSlug: filterSlugForEvent,
       pageUrl: currentPath,
     });
+    impressionFired.current = true;
   }, [hotelId, citySlugForEvent, filterSlugForEvent, currentPath]);
 
   const handleFavoriteClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
 
+    if (isToggling) return;
+
     if (!initialized || !user) {
       navigate('/login');
       return;
     }
+
+    setIsToggling(true);
+    const startTime = Date.now();
 
     const { error } = await toggleHotelSaved(hotelId);
 
     if (!error) {
       toggleFavorite(hotel);
     }
+
+    const elapsed = Date.now() - startTime;
+    const remaining = 500 - elapsed;
+    if (remaining > 0) {
+      await new Promise(r => setTimeout(r, remaining));
+    }
+    setIsToggling(false);
   };
 
   const handleBookClick = (e) => {
-    e.preventDefault();
     e.stopPropagation();
+
+    if (process.env.NODE_ENV === 'development') {
+      if (!hotelId || (!seoCity && !hotel.city)) {
+        console.warn('[Telemetry Warning] Missing critical tracking data:', { hotelId, city: seoCity || hotel.city });
+      }
+      if (!impressionFired.current) {
+        console.warn('[Telemetry Warning] Affiliate redirect fired without impression event:', { hotelId });
+      }
+    }
 
     trackAffiliateRedirect({
       hotel_id: hotelId,
@@ -129,8 +154,6 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
       filterSlug: filterSlugForEvent,
       pageUrl: currentPath,
     });
-
-    window.location.href = affiliateLink;
   };
 
   const isBudgetHotel =
@@ -145,12 +168,13 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
       ? hotel.location.split(',')[0]
       : null);
 
-  const bookingLabel = getBookingLabel(hotel.rating || 0, Boolean(isBudgetHotel));
+  const bookingLabel = getBookingLabel(hotel.rating || 0, Boolean(isBudgetHotel), hotel.price);
   const priceMicrocopy = getPriceMicrocopy(
     hotel.price,
     cityAverage,
     primaryCity,
-    Boolean(isBudgetHotel)
+    Boolean(isBudgetHotel),
+    favorited
   );
 
   if (variant === 'featured') {
@@ -166,8 +190,23 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-foreground/60 via-transparent to-transparent" />
-          <div className="absolute top-3 left-3 z-10">
-             {isTopConverting && (
+          <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
+             {favorited && (
+                <div className="flex items-center gap-1 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded shadow-sm">
+                  <Heart className="w-3 h-3 fill-current" /> You Saved This
+                </div>
+             )}
+             {favorited && isBestValue && (
+             <div className="flex items-center gap-1 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
+               <DollarSign className="w-3 h-3" /> Great Price for You
+             </div>
+          )}
+          {favorited && isHighDemand && (
+             <div className="flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
+               <Flame className="w-3 h-3" /> Back in Demand
+             </div>
+          )}
+          {!favorited && isTopConverting && (
                 <div className="flex items-center gap-1 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm animate-pulse">
                   <TrendingUp className="w-3 h-3" /> Top Converting
                 </div>
@@ -190,7 +229,8 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
           <div className="absolute top-4 right-4 flex items-center gap-2">
             <button
               onClick={handleFavoriteClick}
-              className="p-2 rounded-full bg-card/90 hover:bg-card transition-colors"
+              disabled={isToggling}
+              className={`p-2 rounded-full bg-card/90 hover:bg-card transition-colors ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
               aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
             >
               <Heart
@@ -220,7 +260,22 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
         <div className="absolute top-3 left-3 flex flex-col gap-2 z-10">
-          {isTopConverting && (
+          {favorited && (
+            <div className="flex items-center gap-1 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded shadow-sm">
+              <Heart className="w-3 h-3 fill-current" /> You Saved This
+            </div>
+          )}
+          {favorited && isBestValue && (
+            <div className="flex items-center gap-1 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
+              <DollarSign className="w-3 h-3" /> Great Price for You
+            </div>
+          )}
+          {favorited && isHighDemand && (
+             <div className="flex items-center gap-1 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded shadow-sm">
+               <Flame className="w-3 h-3" /> Back in Demand
+             </div>
+          )}
+          {!favorited && isTopConverting && (
             <div className="flex items-center gap-1 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded shadow-sm animate-pulse">
               <TrendingUp className="w-3 h-3" /> Top Converting
             </div>
@@ -247,10 +302,11 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
         </div>
         <div className="absolute top-4 right-4 flex items-center gap-2">
           <button
-            onClick={handleFavoriteClick}
-            className="p-2 rounded-full bg-card/90 hover:bg-card transition-colors z-10"
-            aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
-          >
+              onClick={handleFavoriteClick}
+              disabled={isToggling}
+              className={`p-2 rounded-full bg-card/90 hover:bg-card transition-colors z-10 ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title={!user ? "Sign in to save hotels" : favorited ? "Remove from favorites" : "Add to favorites"}
+            >
             <Heart
               className={`w-4 h-4 transition-colors ${
                 favorited ? 'fill-red-500 text-red-500' : 'text-muted-foreground'

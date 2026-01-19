@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams, createSearchParams, useSearchParams, useLocation } from 'react-router-dom';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HotelCard from '@/components/HotelCard';
@@ -9,6 +9,8 @@ import { cities } from '@/data/cities';
 import useBookingStore from '@/stores/useBookingStore';
 import { trackAffiliateRedirect, trackBookingClick, trackHotelView } from '@/utils/analytics';
 import { trackAffiliateEvent } from '@/utils/affiliateEvents';
+import { useSavedHotelIds } from '@/hooks/useSavedHotelIds';
+import useAuthStore from '@/stores/useAuthStore';
 import {
   Star,
   MapPin,
@@ -66,7 +68,8 @@ const findStaticHotel = (id) => {
 
 
 
-const getBookingLabel = (rating, isBudget) => {
+const getBookingLabel = (rating, isBudget, price) => {
+  if (!price) return 'Check Availability';
   if (isBudget) return 'View Cheapest Option';
   if (rating >= 4.5) return 'View Best Rated Deal';
   return 'View Best Deal';
@@ -112,8 +115,12 @@ const HotelDetail = () => {
 
   const { getBadges, getBetterAlternative, shouldHideHotel, sortHotelsByRevenue } = useRevenueEngine();
 
-  // UI-only local state
-  const [isFavorite, setIsFavorite] = useState(false);
+  // Auth & Saved Hotels
+  const user = useAuthStore((state) => state.user);
+  const initialized = useAuthStore((state) => state.initialized);
+  const { isHotelSaved, toggleHotelSaved } = useSavedHotelIds();
+  const [isToggling, setIsToggling] = useState(false);
+  const impressionFired = useRef(false);
   const [showExitIntent, setShowExitIntent] = useState(false);
   const [canShowExit, setCanShowExit] = useState(false);
 
@@ -133,6 +140,29 @@ const HotelDetail = () => {
 
   // Use static hotel or LiteAPI hotel
   const hotel = staticHotel || liteApiHotel;
+  const hotelId = hotel?.liteApiId || hotel?.id;
+  const isFavorite = isHotelSaved(hotelId);
+
+  const handleFavoriteClick = async () => {
+    if (isToggling) return;
+
+    if (!initialized || !user) {
+      navigate('/login');
+      return;
+    }
+
+    setIsToggling(true);
+    const startTime = Date.now();
+
+    const { error } = await toggleHotelSaved(hotelId);
+
+    const elapsed = Date.now() - startTime;
+    const remaining = 500 - elapsed;
+    if (remaining > 0) {
+      await new Promise(r => setTimeout(r, remaining));
+    }
+    setIsToggling(false);
+  };
 
   useEffect(() => {
     if (hotel) {
@@ -154,6 +184,7 @@ const HotelDetail = () => {
           filterSlug: null,
           pageUrl: `${location.pathname}${location.search}`,
         });
+        impressionFired.current = true;
       }
     }
   }, [hotel, setSelectedHotel, citySlugFromParams, location]);
@@ -255,7 +286,7 @@ const HotelDetail = () => {
 
   const revenueBadges = hotel ? getBadges(hotel.liteApiId || hotel.id) : [];
   const isTopConverting = revenueBadges.some(b => b.type === 'top_converting');
-  const bookingLabel = getBookingLabel(hotel?.rating || 0, Boolean(isBudgetHotel));
+  const bookingLabel = getBookingLabel(hotel?.rating || 0, Boolean(isBudgetHotel), hotel?.price);
   const priceMicrocopy = getPriceMicrocopy(
     hotel?.price,
     cityAverage,
@@ -335,83 +366,94 @@ const HotelDetail = () => {
     );
   }
 
-const handleBookNow = () => {
-  const hotelIdForUrl = hotel.liteApiId || hotel.id;
+// Affiliate Logic
+  const affiliateParams = useMemo(() => {
+     if (!hotel?.liteApiId) return '';
+     return new URLSearchParams({
+      city: hotel.city || hotel.location || 'unknown',
+      hotel: hotel.name || 'hotel',
+      price: hotel.price ? hotel.price.toString() : '0',
+      page: location.pathname,
+      checkIn: checkIn || '',
+      checkOut: checkOut || '',
+      guests: guests ? guests.toString() : '',
+      rooms: rooms ? rooms.toString() : '',
+    }).toString();
+  }, [hotel, location.pathname, checkIn, checkOut, guests, rooms]);
 
-  if (typeof window !== 'undefined' && hotel.liteApiId) {
-    const clickedKey = `exit_clicked_${hotel.liteApiId}`;
-    sessionStorage.setItem(clickedKey, '1');
-  }
+  const affiliateLink = hotel?.liteApiId ? `/go/hotel/${hotelId}?${affiliateParams}` : null;
 
-  if (isDebug) {
-    console.group('DEBUG: HotelDetail Redirect');
-    console.log('Hotel ID:', hotelIdForUrl);
-    console.log('City:', hotel.city || hotel.location);
-    console.log('Price:', hotel.price);
-    console.log('Check-in:', checkIn);
-    console.log('Check-out:', checkOut);
-    console.log('Guests:', guests);
-    console.log('Rooms:', rooms);
-    console.log('Direct Booking URL:', hotel.bookingUrl);
-    console.groupEnd();
+  const handleBookNow = () => {
+    const hotelIdForUrl = hotel.liteApiId || hotel.id;
 
-    if (!window.confirm('DEBUG MODE: Continue redirect?')) {
+    if (typeof window !== 'undefined' && hotel.liteApiId) {
+      const clickedKey = `exit_clicked_${hotel.liteApiId}`;
+      sessionStorage.setItem(clickedKey, '1');
+    }
+
+    if (isDebug) {
+      console.group('DEBUG: HotelDetail Redirect');
+      console.log('Hotel ID:', hotelIdForUrl);
+      console.log('City:', hotel.city || hotel.location);
+      console.log('Price:', hotel.price);
+      console.log('Direct Booking URL:', hotel.bookingUrl);
+      console.groupEnd();
+
+      if (!window.confirm('DEBUG MODE: Continue redirect?')) {
+        return;
+      }
+    }
+
+    trackBookingClick({
+      hotel_id: hotelIdForUrl,
+      city: hotel.city || hotel.location,
+      price: hotel.price,
+      check_in: checkIn,
+      check_out: checkOut,
+      guests,
+      rooms,
+      source: hotel.liteApiId ? 'liteapi' : 'static'
+    });
+
+    if (process.env.NODE_ENV === 'development') {
+      if (!hotelIdForUrl || (!hotel.city && !hotel.location)) {
+         console.warn('[Telemetry Warning] Missing critical tracking data:', { hotelId: hotelIdForUrl, city: hotel.city || hotel.location });
+      }
+      if (!impressionFired.current) {
+         console.warn('[Telemetry Warning] Affiliate redirect fired without impression event:', { hotelId: hotelIdForUrl });
+      }
+    }
+
+    trackAffiliateEvent({
+      eventType: 'view_deal_click',
+      hotelId: hotelIdForUrl,
+      citySlug: citySlugFromParams || hotel.citySlug || null,
+      filterSlug: null,
+      pageUrl: `${location.pathname}${location.search}`,
+    });
+
+    // 👉 LITEAPI hotels: Browser handles the <a> tag navigation (affiliateLink)
+    // We only need to handle navigation for static hotels here.
+    if (hotel.liteApiId) {
       return;
     }
-  }
 
-  trackBookingClick({
-    hotel_id: hotelIdForUrl,
-    city: hotel.city || hotel.location,
-    price: hotel.price,
-    check_in: checkIn,
-    check_out: checkOut,
-    guests,
-    rooms,
-    source: hotel.liteApiId ? 'liteapi' : 'static'
-  });
+    // 👉 Static hotels go to checkout
+    setSelectedHotel(hotel);
 
-  trackAffiliateEvent({
-    eventType: 'view_deal_click',
-    hotelId: hotelIdForUrl,
-    citySlug: citySlugFromParams || hotel.citySlug || null,
-    filterSlug: null,
-    pageUrl: `${location.pathname}${location.search}`,
-  });
+    const checkoutParams = {
+      hotelId: hotelIdForUrl.toString(),
+    };
+    if (checkIn) checkoutParams.checkIn = checkIn;
+    if (checkOut) checkoutParams.checkOut = checkOut;
+    if (guests && guests !== 2) checkoutParams.guests = guests.toString();
+    if (rooms && rooms !== 1) checkoutParams.rooms = rooms.toString();
 
-  // 👉 LITEAPI hotels MUST go through monetization
-  if (hotel.liteApiId) {
-    const params = new URLSearchParams({
-      city: hotel.city || hotel.location || '',
-      hotel: hotel.name || '',
-      price: hotel.price || '',
-      page: location.pathname,
-      checkIn,
-      checkOut,
-      guests,
-      rooms: rooms.toString(),
-    }).toString();
-
-    window.location.href = `/go/hotel/${hotelIdForUrl}?${params}`;
-    return;
-  }
-
-  // 👉 Static hotels go to checkout
-  setSelectedHotel(hotel);
-
-  const checkoutParams = {
-    hotelId: hotelIdForUrl.toString(),
+    navigate({
+      pathname: '/checkout',
+      search: createSearchParams(checkoutParams).toString(),
+    });
   };
-  if (checkIn) checkoutParams.checkIn = checkIn;
-  if (checkOut) checkoutParams.checkOut = checkOut;
-  if (guests && guests !== 2) checkoutParams.guests = guests.toString();
-  if (rooms && rooms !== 1) checkoutParams.rooms = rooms.toString();
-
-  navigate({
-    pathname: '/checkout',
-    search: createSearchParams(checkoutParams).toString(),
-  });
-};
 
 
   // Calculate nights from global store dates
@@ -533,12 +575,14 @@ const handleBookNow = () => {
             </nav>
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => setIsFavorite(!isFavorite)}
+                onClick={handleFavoriteClick}
+                disabled={isToggling}
                 className={`p-2 rounded-full border transition-colors ${
                   isFavorite 
                     ? 'border-accent bg-accent/10 text-accent' 
                     : 'border-border hover:border-accent/50'
-                }`}
+                } ${isToggling ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={!user ? "Sign in to save hotels" : isFavorite ? "Remove from favorites" : "Add to favorites"}
               >
                 <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
               </button>
@@ -759,6 +803,7 @@ const handleBookNow = () => {
                 </div>
 
                 <BookingCTA
+                  href={affiliateLink || undefined}
                   onClick={handleBookNow}
                   label={bookingLabel}
                   size="lg"
