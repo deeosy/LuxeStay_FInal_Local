@@ -1,7 +1,8 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import { featuredHotels } from '@/data/hotels';
+import { featuredHotels, allHotels } from '@/data/hotels';
 import {
   User,
   Settings,
@@ -12,13 +13,59 @@ import {
   MapPin,
   Star,
 } from 'lucide-react';
+import AuthGate from '@/components/auth/AuthGate';
+import useFavoritesStore from '@/stores/useFavoritesStore';
+import { supabase } from '@/integrations/supabase/client';
 
-const Account = () => {
+const AccountContent = () => {
+  const navigate = useNavigate();
+  const [userEmail, setUserEmail] = useState('');
+  const [savedHotels, setSavedHotels] = useState([]);
+  const [loadingSaved, setLoadingSaved] = useState(true);
+  const clearFavorites = useFavoritesStore((state) => state.clearFavorites);
+
+  useEffect(() => {
+    const loadUserAndSavedHotels = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        setUserEmail(user.email || '');
+
+        const { data, error } = await supabase
+          .from('user_saved_hotels')
+          .select('hotel_id, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          setSavedHotels(data);
+        } else {
+          setSavedHotels([]);
+        }
+      } else {
+        setUserEmail('');
+        setSavedHotels([]);
+      }
+
+      setLoadingSaved(false);
+    };
+
+    loadUserAndSavedHotels();
+  }, []);
+
   const user = {
-    name: 'John Doe',
-    email: 'john@example.com',
-    memberSince: 'January 2024',
+    name: 'Guest',
+    email: userEmail || 'user',
+    memberSince: 'Member',
     avatar: null,
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    clearFavorites();
+    navigate('/login');
   };
 
   const upcomingBookings = [
@@ -52,9 +99,7 @@ const Account = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-
+    <>
       <main className="pt-24 pb-20">
         <div className="container-luxury">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -90,7 +135,10 @@ const Account = () => {
                   ))}
                 </nav>
 
-                <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors mt-4">
+                <button
+                  onClick={handleSignOut}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors mt-4"
+                >
                   <LogOut className="w-5 h-5" />
                   Sign Out
                 </button>
@@ -237,40 +285,81 @@ const Account = () => {
                     Browse More
                   </Link>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {featuredHotels.slice(0, 2).map((hotel) => (
-                    <Link
-                      key={hotel.id}
-                      to={`/hotel/${hotel.id}`}
-                      className="flex gap-4 p-3 rounded-lg hover:bg-secondary/50 transition-colors"
-                    >
-                      <img
-                        src={hotel.image}
-                        alt={hotel.name}
-                        className="w-20 h-20 rounded-lg object-cover"
-                      />
-                      <div>
-                        <h3 className="font-medium text-sm mb-1">{hotel.name}</h3>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
-                          <MapPin className="w-3 h-3" />
-                          {hotel.location}
-                        </div>
-                        <p className="text-sm font-medium">
-                          ${hotel.price}
-                          <span className="text-xs text-muted-foreground font-normal">
-                            /night
-                          </span>
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
+                {loadingSaved ? (
+                  <p className="text-sm text-muted-foreground">Loading saved hotels...</p>
+                ) : savedHotels.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    You have not saved any hotels yet.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {savedHotels.map((row) => {
+                      const hotel =
+                        allHotels.find((h) => String(h.id) === row.hotel_id) || null;
+
+                      if (!hotel) {
+                        return (
+                          <div
+                            key={row.hotel_id}
+                            className="flex gap-4 p-3 rounded-lg border border-border"
+                          >
+                            <div className="flex-1">
+                              <h3 className="font-medium text-sm mb-1">
+                                Saved Hotel #{row.hotel_id}
+                              </h3>
+                              <p className="text-xs text-muted-foreground">
+                                This hotel was saved from a live search result.
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <Link
+                          key={row.hotel_id}
+                          to={`/hotel/${hotel.id}`}
+                          className="flex gap-4 p-3 rounded-lg hover:bg-secondary/50 transition-colors"
+                        >
+                          <img
+                            src={hotel.image}
+                            alt={hotel.name}
+                            className="w-20 h-20 rounded-lg object-cover"
+                          />
+                          <div>
+                            <h3 className="font-medium text-sm mb-1">{hotel.name}</h3>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                              <MapPin className="w-3 h-3" />
+                              {hotel.location}
+                            </div>
+                            <p className="text-sm font-medium">
+                              ${hotel.price}
+                              <span className="text-xs text-muted-foreground font-normal">
+                                /night
+                              </span>
+                            </p>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </main>
+    </>
+  );
+};
 
+const Account = () => {
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <AuthGate>
+        <AccountContent />
+      </AuthGate>
       <Footer />
     </div>
   );

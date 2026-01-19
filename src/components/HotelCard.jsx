@@ -1,7 +1,8 @@
-import { Link, useSearchParams, useLocation } from 'react-router-dom';
+import { Link, useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, Flame, DollarSign, Timer, TrendingUp } from 'lucide-react';
 import useFavoritesStore from '@/stores/useFavoritesStore';
+import { supabase } from '@/integrations/supabase/client';
 import { trackAffiliateRedirect } from '@/utils/analytics';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
 import PriceAnchor from '@/components/PriceAnchor';
@@ -30,6 +31,7 @@ const getPriceMicrocopy = (price, average, city, isBudget) => {
 const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const isDebug = searchParams.get('debug') === 'true';
   const { isFavorite, toggleFavorite } = useFavoritesStore();
   const hotelId = hotel.liteApiId || hotel.id;
@@ -90,10 +92,41 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
     });
   }, [hotelId, citySlugForEvent, filterSlugForEvent, currentPath]);
 
-  const handleFavoriteClick = (e) => {
+  const handleFavoriteClick = async (e) => {
     e.preventDefault(); // Prevent navigation
     e.stopPropagation();
-    toggleFavorite(hotel);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session || !session.user) {
+      navigate('/login');
+      return;
+    }
+
+    const userId = session.user.id;
+
+    if (favorited) {
+      await supabase
+        .from('user_saved_hotels')
+        .delete()
+        .eq('user_id', userId)
+        .eq('hotel_id', String(hotelId));
+      toggleFavorite(hotel);
+    } else {
+      await supabase
+        .from('user_saved_hotels')
+        .upsert(
+          {
+            user_id: userId,
+            hotel_id: String(hotelId),
+          },
+          {
+            onConflict: 'user_id,hotel_id',
+          }
+        );
+      toggleFavorite(hotel);
+    }
   };
 
   const handleBookClick = (e) => {

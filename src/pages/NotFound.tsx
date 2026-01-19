@@ -1,16 +1,32 @@
 import { useLocation, Navigate } from "react-router-dom";
 import { useEffect } from "react";
+import { isConsideredSeoRoute } from "@/utils/seoRoutes";
+import { Loader2 } from "lucide-react";
 
 const NotFound = () => {
   const location = useLocation();
+  const pathname = location.pathname;
+  const isSeoPath = isConsideredSeoRoute(pathname);
 
   useEffect(() => {
-    console.warn("404 fallback triggered for:", location.pathname);
-  }, [location.pathname]);
+    if (!isSeoPath) {
+      console.warn("404 fallback triggered for:", pathname);
+    }
+  }, [isSeoPath, pathname]);
 
-  // Allow SEO destination pages to pass through
-  if (location.pathname.startsWith("/hotels-in-")) {
-    return <Navigate to={location.pathname} replace />;
+  // Allow SEO destination pages to pass through with a friendly loading state
+  // This prevents 404s for valid virtual routes while data fetches or redirection happens
+  if (isSeoPath) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-accent mx-auto mb-4" />
+          <p className="mb-4 text-xl text-muted-foreground">
+            Loading destination information...
+          </p>
+        </div>
+      </div>
+    );
   }
 
   // Normal 404 for everything else

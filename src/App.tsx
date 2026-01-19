@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { initGA, trackPageView } from "@/utils/analytics";
+import { supabase } from "@/integrations/supabase/client";
+import useAuthStore from "@/stores/useAuthStore";
 import Home from "./pages/Home";
 import SearchResults from "./pages/SearchResults";
 import HotelDetail from "./pages/HotelDetail";
@@ -24,9 +26,10 @@ import CityHotels from "./pages/CityHotels";
 const queryClient = new QueryClient();
 
 
-// Analytics wrapper to access router context
-const AnalyticsTracker = () => {
+// Analytics and auth wrapper to access router context
+const AppLifecycle = () => {
   const location = useLocation();
+  const setAuthState = useAuthStore((state) => state.setAuthState);
 
   useEffect(() => {
     initGA();
@@ -35,6 +38,41 @@ const AnalyticsTracker = () => {
   useEffect(() => {
     trackPageView(location.pathname + location.search);
   }, [location]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const initAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!isMounted) return;
+
+      setAuthState({
+        user: session?.user || null,
+        session: session || null,
+      });
+    };
+
+    initAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+
+      setAuthState({
+        user: session?.user || null,
+        session: session || null,
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [setAuthState]);
 
   return null;
 };
@@ -50,7 +88,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <AnalyticsTracker />
+          <AppLifecycle />
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/search" element={<SearchResults />} />
@@ -71,6 +109,7 @@ const App = () => (
             <Route path="/hotel/:id" element={<HotelDetail />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<Register />} />
             <Route path="/account" element={<Account />} />
             <Route path="/admin/affiliate" element={<AdminAffiliate />} />
             <Route path="*" element={<NotFound />} />

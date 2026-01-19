@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
+import { addDays } from 'date-fns';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import HotelCard from '@/components/HotelCard';
@@ -260,6 +261,51 @@ const DestinationPage = () => {
 
   // Get other cities for internal linking
   const otherCities = cities.filter(c => c.citySlug !== citySlug).slice(0, 4);
+
+  // Resolve nearby cities for empty state
+  const nearbyCities = useMemo(() => {
+    if (!destinationConfig?.nearbyCities) return [];
+    return destinationConfig.nearbyCities
+      .map(slug => cities.find(c => c.citySlug === slug))
+      .filter(Boolean);
+  }, [destinationConfig]);
+
+  const renderEmptyResults = () => (
+    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center max-w-3xl mx-auto my-12">
+      <h2 className="text-2xl font-bold text-gray-900 mb-4">No availability right now</h2>
+      <p className="text-gray-600 mb-6">We couldn't find any hotels for your selected dates and guests in {destinationConfig.cityName}.</p>
+      
+      <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
+        {nearbyCities.length > 0 && (
+           <Link to={`/hotels-in-${nearbyCities[0].citySlug}`} className="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2">
+             <MapPin className="w-4 h-4" />
+             Try {nearbyCities[0].cityName}
+           </Link>
+        )}
+        
+        <button 
+           onClick={() => setCheckIn(addDays(new Date(), 7))} 
+           className="px-6 py-3 bg-gray-100 text-gray-900 font-medium rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
+        >
+          <Calendar className="w-4 h-4" />
+          Check Next Week
+        </button>
+      </div>
+
+      {nearbyCities.length > 0 && (
+        <div className="mt-8">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Or explore nearby</h3>
+            <div className="flex flex-wrap justify-center gap-3">
+                {nearbyCities.map(city => (
+                    <Link key={city.citySlug} to={`/hotels-in-${city.citySlug}`} className="text-primary hover:underline bg-blue-50 px-3 py-1 rounded-full text-sm">
+                        {city.cityName}
+                    </Link>
+                ))}
+            </div>
+        </div>
+      )}
+    </div>
+  );
 
   // Helper to strip HTML from text
   const stripHtml = (html) => {
@@ -692,9 +738,11 @@ const DestinationPage = () => {
           </div>
         )}
 
-        {!loading && filteredHotels.length === 0 && (
+        {!loading && !error && hotels && hotels.length === 0 && renderEmptyResults()}
+
+        {!loading && !error && hotels && hotels.length > 0 && filteredHotels.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-xl text-gray-600">No hotels found matching your criteria in {destinationConfig.cityName}.</p>
+            <p className="text-xl text-gray-600">No hotels found matching your filters in {destinationConfig.cityName}.</p>
             <button 
               onClick={() => {
                 setFilterPrice('all');
