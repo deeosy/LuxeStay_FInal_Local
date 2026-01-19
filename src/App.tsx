@@ -30,6 +30,7 @@ const queryClient = new QueryClient();
 const AppLifecycle = () => {
   const location = useLocation();
   const setAuthState = useAuthStore((state) => state.setAuthState);
+  const loadSavedHotelIds = useAuthStore((state) => state.loadSavedHotelIds);
 
   useEffect(() => {
     initGA();
@@ -53,6 +54,12 @@ const AppLifecycle = () => {
         user: session?.user || null,
         session: session || null,
       });
+
+      if (session?.user?.id) {
+        loadSavedHotelIds(session.user.id);
+      } else {
+        loadSavedHotelIds(null);
+      }
     };
 
     initAuth();
@@ -66,13 +73,19 @@ const AppLifecycle = () => {
         user: session?.user || null,
         session: session || null,
       });
+
+      if (session?.user?.id) {
+        loadSavedHotelIds(session.user.id);
+      } else {
+        loadSavedHotelIds(null);
+      }
     });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [setAuthState]);
+  }, [setAuthState, loadSavedHotelIds]);
 
   return null;
 };

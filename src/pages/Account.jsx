@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { featuredHotels, allHotels } from '@/data/hotels';
@@ -16,48 +16,19 @@ import {
 import AuthGate from '@/components/auth/AuthGate';
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { supabase } from '@/integrations/supabase/client';
+import useAuthStore from '@/stores/useAuthStore';
+import { useSavedHotelIds } from '@/hooks/useSavedHotelIds';
 
 const AccountContent = () => {
   const navigate = useNavigate();
-  const [userEmail, setUserEmail] = useState('');
-  const [savedHotels, setSavedHotels] = useState([]);
-  const [loadingSaved, setLoadingSaved] = useState(true);
+  const [userEmail] = useState('');
+  const authUser = useAuthStore((state) => state.user);
+  const { savedHotelIds, loading } = useSavedHotelIds();
   const clearFavorites = useFavoritesStore((state) => state.clearFavorites);
 
-  useEffect(() => {
-    const loadUserAndSavedHotels = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        setUserEmail(user.email || '');
-
-        const { data, error } = await supabase
-          .from('user_saved_hotels')
-          .select('hotel_id, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (!error && data) {
-          setSavedHotels(data);
-        } else {
-          setSavedHotels([]);
-        }
-      } else {
-        setUserEmail('');
-        setSavedHotels([]);
-      }
-
-      setLoadingSaved(false);
-    };
-
-    loadUserAndSavedHotels();
-  }, []);
-
-  const user = {
+  const userInfo = {
     name: 'Guest',
-    email: userEmail || 'user',
+    email: authUser?.email || userEmail || 'user',
     memberSince: 'Member',
     avatar: null,
   };
@@ -111,10 +82,10 @@ const AccountContent = () => {
                   <div className="w-20 h-20 rounded-full bg-secondary flex items-center justify-center mx-auto mb-4">
                     <User className="w-10 h-10 text-muted-foreground" />
                   </div>
-                  <h2 className="font-medium text-lg">{user.name}</h2>
-                  <p className="text-sm text-muted-foreground">{user.email}</p>
+                  <h2 className="font-medium text-lg">{userInfo.name}</h2>
+                  <p className="text-sm text-muted-foreground">{userInfo.email}</p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Member since {user.memberSince}
+                    Member since {userInfo.memberSince}
                   </p>
                 </div>
 
@@ -150,7 +121,7 @@ const AccountContent = () => {
               {/* Welcome */}
               <div className="bg-card border border-border rounded-xl p-8">
                 <h1 className="font-display text-2xl font-medium mb-2">
-                  Welcome back, {user.name.split(' ')[0]}!
+                  Welcome back, {userInfo.name.split(' ')[0]}!
                 </h1>
                 <p className="text-muted-foreground">
                   Manage your bookings, saved hotels, and account settings.
@@ -285,27 +256,27 @@ const AccountContent = () => {
                     Browse More
                   </Link>
                 </div>
-                {loadingSaved ? (
+                {loading ? (
                   <p className="text-sm text-muted-foreground">Loading saved hotels...</p>
-                ) : savedHotels.length === 0 ? (
+                ) : savedHotelIds.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     You have not saved any hotels yet.
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {savedHotels.map((row) => {
+                    {savedHotelIds.map((hotelId) => {
                       const hotel =
-                        allHotels.find((h) => String(h.id) === row.hotel_id) || null;
+                        allHotels.find((h) => String(h.id) === String(hotelId)) || null;
 
                       if (!hotel) {
                         return (
                           <div
-                            key={row.hotel_id}
+                            key={hotelId}
                             className="flex gap-4 p-3 rounded-lg border border-border"
                           >
                             <div className="flex-1">
                               <h3 className="font-medium text-sm mb-1">
-                                Saved Hotel #{row.hotel_id}
+                                Saved Hotel #{hotelId}
                               </h3>
                               <p className="text-xs text-muted-foreground">
                                 This hotel was saved from a live search result.
@@ -317,7 +288,7 @@ const AccountContent = () => {
 
                       return (
                         <Link
-                          key={row.hotel_id}
+                          key={hotelId}
                           to={`/hotel/${hotel.id}`}
                           className="flex gap-4 p-3 rounded-lg hover:bg-secondary/50 transition-colors"
                         >
