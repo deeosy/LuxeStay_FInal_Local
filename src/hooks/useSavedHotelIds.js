@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import useAuthStore from '@/stores/useAuthStore';
+import { toast } from '@/hooks/use-toast';
 
 export function useSavedHotelIds() {
   const user = useAuthStore((state) => state.user);
@@ -60,8 +61,18 @@ export function useSavedHotelIds() {
     if (error) {
       if (alreadySaved) {
         addSavedHotelId(value);
+        toast({
+          variant: "destructive",
+          title: "Could not remove saved hotel.",
+          description: "Please try again.",
+        });
       } else {
         removeSavedHotelId(value);
+        toast({
+          variant: "destructive",
+          title: "Could not save hotel.",
+          description: "Please try again.",
+        });
       }
     }
 

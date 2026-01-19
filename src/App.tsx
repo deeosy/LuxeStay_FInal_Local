@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { toast } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
@@ -31,10 +32,17 @@ const AppLifecycle = () => {
   const location = useLocation();
   const setAuthState = useAuthStore((state) => state.setAuthState);
   const loadSavedHotelIds = useAuthStore((state) => state.loadSavedHotelIds);
+  const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
     initGA();
   }, []);
+
+  useEffect(() => {
+    if (user && !user.email_confirmed_at) {
+      toast("Please verify your email to unlock all features.");
+    }
+  }, [user]);
 
   useEffect(() => {
     trackPageView(location.pathname + location.search);

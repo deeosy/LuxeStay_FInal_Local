@@ -1,10 +1,12 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Menu, X, User, Search } from 'lucide-react';
+import useAuthStore from '@/stores/useAuthStore';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
 
   const navLinks = [
     { name: 'Home', path: '/' },
@@ -45,18 +47,21 @@ const Header = () => {
             >
               <Search className="w-5 h-5" />
             </button>
-            <Link
-              to="/account"
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <User className="w-5 h-5" />
-            </Link>
-            <Link
-              to="/register"
-              className="btn-primary text-sm"
-            >
-              Sign In
-            </Link>
+            {user ? (
+              <Link
+                to="/account"
+                className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <User className="w-5 h-5" />
+              </Link>
+            ) : (
+              <Link
+                to="/register"
+                className="btn-primary text-sm"
+              >
+                Sign In
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -83,20 +88,23 @@ const Header = () => {
                 </Link>
               ))}
               <div className="flex gap-4 mt-4 pt-4 border-t border-border">
-                <Link
-                  to="/account"
-                  className="flex-1 text-center py-2 border border-border rounded-md text-sm font-medium"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Account
-                </Link>
-                <Link
-                  to="/register"
-                  className="flex-1 text-center py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Sign In
-                </Link>
+                {user ? (
+                  <Link
+                    to="/account"
+                    className="flex-1 text-center py-2 border border-border rounded-md text-sm font-medium"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Account
+                  </Link>
+                ) : (
+                  <Link
+                    to="/register"
+                    className="flex-1 text-center py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Sign In
+                  </Link>
+                )}
               </div>
             </nav>
           </div>

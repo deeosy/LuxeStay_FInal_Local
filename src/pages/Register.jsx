@@ -1,5 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { toast } from 'sonner';
@@ -8,9 +8,19 @@ import { supabase } from '@/integrations/supabase/client';
 
 const Register = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (location.pathname === '/register') {
+      setIsLogin(false);
+    } else {
+      setIsLogin(true);
+    }
+  }, [location.pathname]);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -55,8 +65,8 @@ const Register = () => {
           setError(signUpError.message || 'Unable to create account');
           toast.error(signUpError.message || 'Unable to create account');
         } else if (data?.user) {
-          toast.success('Account created successfully!');
-          navigate('/account');
+          toast.success('Account created. Please check your email to verify your account.');
+          navigate('/login');
         } else {
           setError('Unable to create account. Please try again.');
           toast.error('Unable to create account. Please try again.');
@@ -237,7 +247,7 @@ const Register = () => {
                 {isLogin ? "Don't have an account? " : 'Already have an account? '}
                 <button
                   type="button"
-                  onClick={() => setIsLogin(!isLogin)}
+                  onClick={() => navigate(isLogin ? '/register' : '/login')}
                   className="text-accent font-medium hover:underline"
                 >
                   {isLogin ? 'Sign up' : 'Sign in'}
