@@ -25,34 +25,44 @@ export function useSavedHotelIds() {
     const value = String(hotelId);
     const alreadySaved = savedHotelIds.includes(value);
 
+    // Optimistic Update
     if (alreadySaved) {
-      const { error } = await supabase
+      removeSavedHotelId(value);
+    } else {
+      addSavedHotelId(value);
+    }
+
+    let error = null;
+
+    if (alreadySaved) {
+      const { error: dbError } = await supabase
         .from('user_saved_hotels')
         .delete()
         .eq('user_id', user.id)
         .eq('hotel_id', value);
-
-      if (!error) {
-        removeSavedHotelId(value);
-      }
-
-      return { error };
+      error = dbError;
+    } else {
+      const { error: dbError } = await supabase
+        .from('user_saved_hotels')
+        .upsert(
+          {
+            user_id: user.id,
+            hotel_id: value,
+          },
+          {
+            onConflict: 'user_id,hotel_id',
+          }
+        );
+      error = dbError;
     }
 
-    const { error } = await supabase
-      .from('user_saved_hotels')
-      .upsert(
-        {
-          user_id: user.id,
-          hotel_id: value,
-        },
-        {
-          onConflict: 'user_id,hotel_id',
-        }
-      );
-
-    if (!error) {
-      addSavedHotelId(value);
+    // Rollback on failure
+    if (error) {
+      if (alreadySaved) {
+        addSavedHotelId(value);
+      } else {
+        removeSavedHotelId(value);
+      }
     }
 
     return { error };
