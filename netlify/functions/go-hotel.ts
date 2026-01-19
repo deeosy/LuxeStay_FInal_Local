@@ -33,6 +33,21 @@ export const handler: Handler = async (event) => {
 
     if (!supabaseUrl || !serviceRoleKey) {
       console.error("Supabase environment variables are not configured");
+
+      const liteapiKey =
+        process.env.LITEAPI_KEY_SANDBOX || process.env.VITE_LITEAPI_KEY;
+
+      if (liteapiKey) {
+        const directUrl = `https://api.liteapi.travel/v3/hotels/${hotelId}/book?apiKey=${liteapiKey}`;
+
+        return {
+          statusCode: 302,
+          headers: {
+            Location: directUrl,
+          },
+        };
+      }
+
       return {
         statusCode: 302,
         headers: {

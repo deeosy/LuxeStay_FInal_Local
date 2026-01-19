@@ -4,7 +4,7 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import SEOFooter from '@/components/SEOFooter';
 import { cities } from '@/data/cities';
-import { Helmet } from 'react-helmet';
+import { Helmet } from 'react-helmet-async';
 
 const TopCities = () => {
   // In a real scenario, we would sort by revenue potential (EPC * Volume) from Supabase.

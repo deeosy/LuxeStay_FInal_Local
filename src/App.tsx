@@ -15,6 +15,7 @@ import Account from "./pages/Account";
 import NotFound from "./pages/NotFound";
 import DestinationPage from "./pages/DestinationPage";
 import Destinations from "./pages/Destinations";
+import TopCities from "./pages/TopCities";
 import CityCategoryPage from "./pages/CityCategoryPage";
 import PoiLandingPage from "./pages/PoiLandingPage";
 import AdminAffiliate from "./pages/AdminAffiliate";
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/" element={<Home />} />
             <Route path="/search" element={<SearchResults />} />
             <Route path="/destinations" element={<Destinations />} />
+            <Route path="/top-cities" element={<TopCities />} />
             <Route path="/hotels/:citySlug" element={<CityHotels />} />
             <Route path="/hotels/:citySlug/:filterSlug" element={<CityHotels />} />
             <Route path="/hotels-in/:citySlug" element={<DestinationPage />} />

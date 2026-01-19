@@ -107,10 +107,10 @@ const DestinationPage = () => {
      // Check if params exist
      const match = location.pathname.match(/\/hotels-near-(.+)-from-(.+)/);
      if (match) {
-        resolvedNearbyCitySlug = match[1];
-        resolvedCitySlug = match[2];
-        targetNearbyCity = getCityBySlug(resolvedNearbyCitySlug);
-        targetOriginCity = getCityBySlug(resolvedCitySlug);
+        const nearbySlug = match[1];
+        const originSlug = match[2];
+        targetNearbyCity = getCityBySlug(nearbySlug);
+        targetOriginCity = getCityBySlug(originSlug);
         // The main destination is the nearby city (where we want hotels)
         targetCity = targetNearbyCity; 
      }
