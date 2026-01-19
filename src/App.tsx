@@ -105,6 +105,40 @@ const AppLifecycle = () => {
   return null;
 };
 
+const AppRoutes = () => {
+  const initialized = useAuthStore((state) => state.initialized);
+
+  if (!initialized) return null;
+
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/search" element={<SearchResults />} />
+      <Route path="/destinations" element={<Destinations />} />
+      <Route path="/top-cities" element={<TopCities />} />
+      <Route path="/hotels/:citySlug" element={<CityHotels />} />
+      <Route path="/hotels/:citySlug/:filterSlug" element={<CityHotels />} />
+      <Route path="/hotels-in/:citySlug" element={<DestinationPage />} />
+      <Route path="/hotels-in-:citySlug" element={<DestinationPage />} />
+      <Route path="/hotels-in-:citySlug-:districtSlug" element={<DestinationPage />} />
+      <Route path="/best-hotels-in-:citySlug" element={<DestinationPage />} />
+      <Route path="/cheap-hotels-in-:citySlug" element={<DestinationPage />} />
+      <Route path="/luxury-hotels-in-:citySlug" element={<DestinationPage />} />
+      <Route path="/family-hotels-in-:citySlug" element={<DestinationPage />} />
+      <Route path="/hotels-near-:nearbyCitySlug-from-:citySlug" element={<DestinationPage />} />
+      <Route path="/hotels-near-:poiSlug" element={<PoiLandingPage />} />
+      <Route path="/hotels-in/:citySlug/:type" element={<CityCategoryPage />} />
+      <Route path="/hotel/:id" element={<HotelDetail />} />
+      <Route path="/checkout" element={<Checkout />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/login" element={<Register />} />
+      <Route path="/account" element={<Account />} />
+      <Route path="/admin/affiliate" element={<AdminAffiliate />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <HelmetProvider>
@@ -117,31 +151,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AppLifecycle />
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/search" element={<SearchResults />} />
-            <Route path="/destinations" element={<Destinations />} />
-            <Route path="/top-cities" element={<TopCities />} />
-            <Route path="/hotels/:citySlug" element={<CityHotels />} />
-            <Route path="/hotels/:citySlug/:filterSlug" element={<CityHotels />} />
-            <Route path="/hotels-in/:citySlug" element={<DestinationPage />} />
-            <Route path="/hotels-in-:citySlug" element={<DestinationPage />} />
-            <Route path="/hotels-in-:citySlug-:districtSlug" element={<DestinationPage />} />
-            <Route path="/best-hotels-in-:citySlug" element={<DestinationPage />} />
-            <Route path="/cheap-hotels-in-:citySlug" element={<DestinationPage />} />
-            <Route path="/luxury-hotels-in-:citySlug" element={<DestinationPage />} />
-            <Route path="/family-hotels-in-:citySlug" element={<DestinationPage />} />
-            <Route path="/hotels-near-:nearbyCitySlug-from-:citySlug" element={<DestinationPage />} />
-            <Route path="/hotels-near-:poiSlug" element={<PoiLandingPage />} />
-            <Route path="/hotels-in/:citySlug/:type" element={<CityCategoryPage />} />
-            <Route path="/hotel/:id" element={<HotelDetail />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/login" element={<Register />} />
-            <Route path="/account" element={<Account />} />
-            <Route path="/admin/affiliate" element={<AdminAffiliate />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AppRoutes />
         </BrowserRouter>
       </TooltipProvider>
     </HelmetProvider>
