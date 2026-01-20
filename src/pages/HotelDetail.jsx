@@ -32,6 +32,7 @@ import {
 import SEOMetadata from '@/components/seo/SEOMetadata';
 import { useIndexing } from '@/hooks/useIndexing';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
+import { useHotelPriceTracking } from '@/hooks/useHotelPriceTracking';
 import SEOFooter from '@/components/SEOFooter';
 import PriceAnchor from '@/components/PriceAnchor';
 import ScarcityBadge from '@/components/ScarcityBadge';
@@ -123,6 +124,7 @@ const HotelDetail = () => {
   const impressionFired = useRef(false);
   const [showExitIntent, setShowExitIntent] = useState(false);
   const [canShowExit, setCanShowExit] = useState(false);
+  const { recordPrice } = useHotelPriceTracking();
 
   // Check for static hotel first
   const staticHotel = findStaticHotel(id);
@@ -185,9 +187,14 @@ const HotelDetail = () => {
           pageUrl: `${location.pathname}${location.search}`,
         });
         impressionFired.current = true;
+
+        // Step 83: Record price for history
+        if (hotel.price) {
+          recordPrice(hotelIdForEvent, hotel.price);
+        }
       }
     }
-  }, [hotel, setSelectedHotel, citySlugFromParams, location]);
+  }, [hotel, setSelectedHotel, citySlugFromParams, location, recordPrice]);
 
   // Determine city for similar hotels
   const cityForSearch = hotel?.city || hotel?.citySlug || (hotel?.location ? hotel.location.split(',')[0] : '');

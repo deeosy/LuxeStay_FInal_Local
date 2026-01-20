@@ -17,18 +17,48 @@ import {
   ShieldCheck,
   AlertTriangle,
   TrendingUp,
+  Bell,
+  Tag,
+  TrendingDown,
+  Mail,
 } from 'lucide-react';
 import AuthGate from '@/components/auth/AuthGate';
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { supabase } from '@/integrations/supabase/client';
 import useAuthStore from '@/stores/useAuthStore';
 import { useSavedHotelIds } from '@/hooks/useSavedHotelIds';
+import { useNotificationSettings } from '@/hooks/useNotificationSettings';
+import { useUserPriceAlerts } from '@/hooks/useUserPriceAlerts';
+
+const Toggle = ({ checked, onChange, disabled }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    disabled={disabled}
+    onClick={() => !disabled && onChange(!checked)}
+    className={`
+      relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
+      ${checked ? 'bg-primary' : 'bg-muted'}
+      ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+    `}
+  >
+    <span
+      className={`
+        pointer-events-none block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out
+        ${checked ? 'translate-x-5' : 'translate-x-0'}
+      `}
+    />
+  </button>
+);
 
 const AccountContent = () => {
   const navigate = useNavigate();
   const [userEmail] = useState('');
   const authUser = useAuthStore((state) => state.user);
   const { savedHotelIds, loading } = useSavedHotelIds();
+  const { settings: notifSettings, loading: notifLoading, updateSetting } = useNotificationSettings();
+  const { alerts: priceAlerts, loading: alertsLoading } = useUserPriceAlerts();
   const clearFavorites = useFavoritesStore((state) => state.clearFavorites);
 
   const userInfo = {
@@ -387,6 +417,135 @@ const AccountContent = () => {
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* Price Alerts Inbox */}
+              <div className="bg-card border border-border rounded-xl p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-primary/10 rounded-full text-primary">
+                    <Bell className="w-5 h-5" />
+                  </div>
+                  <h2 className="font-display text-xl font-medium">Price Alerts</h2>
+                </div>
+
+                {alertsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading alerts...</p>
+                ) : priceAlerts.length === 0 ? (
+                  <div className="text-center py-8 border border-dashed border-border rounded-lg bg-secondary/10">
+                    <TrendingDown className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">No recent price drops.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {priceAlerts.map((alert) => (
+                      <div key={alert.id} className="p-4 bg-secondary/30 rounded-lg border border-border flex justify-between items-start">
+                        <div>
+                          <h3 className="font-medium text-sm mb-1">Hotel #{alert.hotel_id}</h3>
+                          <div className="flex items-center gap-2">
+                             <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+                               {alert.drop_percent}% OFF
+                             </span>
+                             <span className="text-xs text-muted-foreground">
+                               {new Date(alert.created_at).toLocaleDateString()}
+                             </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-green-600">
+                            ${alert.new_price}
+                          </p>
+                          <p className="text-xs text-muted-foreground line-through">
+                            was ${alert.previous_price}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Notification Preferences */}
+              <div className="bg-card border border-border rounded-xl p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-primary/10 rounded-full text-primary">
+                    <Bell className="w-5 h-5" />
+                  </div>
+                  <h2 className="font-display text-xl font-medium">Notification Preferences</h2>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Price Drop Alerts */}
+                  <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-background rounded-full border border-border">
+                        <TrendingDown className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-sm">Price Drop Alerts</h3>
+                        <p className="text-xs text-muted-foreground">Get notified when prices drop for your saved hotels.</p>
+                      </div>
+                    </div>
+                    <Toggle 
+                      checked={notifSettings?.price_drop_alerts ?? false}
+                      onChange={(checked) => updateSetting('price_drop_alerts', checked)}
+                      disabled={notifLoading || !notifSettings}
+                    />
+                  </div>
+
+                  {/* Availability Alerts */}
+                  <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-background rounded-full border border-border">
+                        <Bell className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-sm">Availability Alerts</h3>
+                        <p className="text-xs text-muted-foreground">Receive alerts when rooms are running low.</p>
+                      </div>
+                    </div>
+                    <Toggle 
+                      checked={notifSettings?.availability_alerts ?? false}
+                      onChange={(checked) => updateSetting('availability_alerts', checked)}
+                      disabled={notifLoading || !notifSettings}
+                    />
+                  </div>
+
+                  {/* Deal Notifications */}
+                  <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-background rounded-full border border-border">
+                        <Tag className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-sm">Deal Notifications</h3>
+                        <p className="text-xs text-muted-foreground">Exclusive discounts and seasonal offers.</p>
+                      </div>
+                    </div>
+                    <Toggle 
+                      checked={notifSettings?.deal_alerts ?? false}
+                      onChange={(checked) => updateSetting('deal_alerts', checked)}
+                      disabled={notifLoading || !notifSettings}
+                    />
+                  </div>
+
+                  {/* Marketing Emails */}
+                  <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-background rounded-full border border-border">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-sm">Marketing Emails</h3>
+                        <p className="text-xs text-muted-foreground">News, travel inspiration, and updates.</p>
+                      </div>
+                    </div>
+                    <Toggle 
+                      checked={notifSettings?.marketing_emails ?? false}
+                      onChange={(checked) => updateSetting('marketing_emails', checked)}
+                      disabled={notifLoading || !notifSettings}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
