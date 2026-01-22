@@ -45,13 +45,19 @@ function setCache(key: string, data: any, ttl: number): void {
 // Normalize LiteAPI hotel data to match our frontend format
 function normalizeHotel(hotel: any, rates?: any) {
   // 1. Dig deep into the rates structure
-  const firstRoom = rates?.rooms?.[0];
+  // Handle both 'rooms' (legacy/some endpoints) and 'roomTypes' (v3 standard)
+  const firstRoom = rates?.rooms?.[0] || rates?.roomTypes?.[0];
   const firstRate = firstRoom?.rates?.[0];
 
   // 2. Identify the PRICE
-  const price = firstRate?.retailRate?.total?.amount 
-    ? Math.round(firstRate.retailRate.total.amount / (rates?.nights || 1))
-    : hotel.pricePerNight || 0;
+  let price = 0;
+  if (firstRate?.retailRate?.total?.amount) {
+    price = Math.round(firstRate.retailRate.total.amount / (rates?.nights || 1));
+  } else if (firstRate?.retailRate?.amount) {
+    price = Math.round(firstRate.retailRate.amount / (rates?.nights || 1));
+  } else if (hotel.pricePerNight) {
+    price = hotel.pricePerNight;
+  }
 
   // 3. PRIORITY URL MAPPING (Crucial for live bookings)
   // We ignore hotel.booking_url because it's usually the sandbox fallback
@@ -76,7 +82,7 @@ function normalizeHotel(hotel: any, rates?: any) {
     bookingUrl, // This will now be passed to your React frontend
     rating: hotel.starRating || hotel.rating || 4.5,
     reviews: hotel.reviewsCount || Math.floor(Math.random() * 500) + 50,
-    image: hotel.main_photo || hotel.mainPhoto || hotel.images?.[0] || '/placeholder.svg',
+    image: hotel.main_photo || hotel.mainPhoto || hotel.images?.[0]?.url || hotel.images?.[0] || '/placeholder.svg',
     images: hotel.images || [hotel.main_photo || hotel.mainPhoto].filter(Boolean),
     description: hotel.description || `Experience exceptional hospitality at ${hotel.name || 'this hotel'}.`,
     amenities: hotel.facilities?.slice(0, 8) || hotel.amenities || ['Wifi', 'Restaurant', 'Concierge'],
@@ -400,6 +406,7 @@ serve(async (req) => {
         const ratesData = await getHotelRates(apiKey, hotelIds, checkIn, checkOut, guests, rooms);
 
         if (ratesData.length > 0) {
+          console.log(`Enriching ${ratesData.length} hotels with live rates`);
           const hotelsWithRates = ratesData.map((item: any) => {
             const baseHotel = hotelData.find(h => (h.id || h.hotelId) === item.hotelId) || item.hotelData || item;
             return normalizeHotel(baseHotel, item);
@@ -408,10 +415,12 @@ serve(async (req) => {
           return new Response(
             JSON.stringify({ 
               hotels: hotelsWithRates, 
-              source: 'liteapi' 
+              source: 'liteapi-live' 
             }),
             { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
           );
+        } else {
+          console.log('Live rates fetch returned no data, falling back to static');
         }
       }
 
@@ -421,7 +430,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           hotels, 
-          source: 'liteapi' 
+          source: 'liteapi-static' 
         }),
         { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       );
