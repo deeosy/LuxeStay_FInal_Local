@@ -492,6 +492,31 @@ const AccountContent = () => {
                     />
                   </div>
 
+                  {/* Price Alert Frequency */}
+                  {notifSettings?.price_drop_alerts && (
+                    <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg ml-8">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-background rounded-full border border-border">
+                          <Calendar className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-sm">Alert Frequency</h3>
+                          <p className="text-xs text-muted-foreground">How often to receive price updates.</p>
+                        </div>
+                      </div>
+                      <select
+                        value={notifSettings?.price_alert_frequency || 'weekly'}
+                        onChange={(e) => updateSetting('price_alert_frequency', e.target.value)}
+                        disabled={notifLoading || !notifSettings}
+                        className="bg-background border border-border rounded-md text-sm px-3 py-1.5 focus:ring-2 focus:ring-primary focus:outline-none cursor-pointer"
+                      >
+                        <option value="instant">Instant</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </div>
+                  )}
+
                   {/* Availability Alerts */}
                   <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-lg">
                     <div className="flex items-center gap-3">

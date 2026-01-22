@@ -31,6 +31,7 @@ export function useNotificationSettings() {
             availability_alerts: false,
             deal_alerts: false,
             marketing_emails: false,
+            price_alert_frequency: 'weekly',
           };
 
           const { data: newData, error: insertError } = await supabase

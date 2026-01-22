@@ -148,13 +148,19 @@ serve(async (req) => {
         // Preference Check
         const { data: settings, error: settingsError } = await supabase
           .from('user_notification_settings')
-          .select('price_drop_alerts')
+          .select('price_drop_alerts, marketing_emails')
           .eq('user_id', groupKey.split(':')[0])    
           .single();
         
-        // If error (not found) or explicitly disabled, skip
-        // Note: .single() returns error if no rows found (PGRST116)
-        // If settings is null or price_drop_alerts is false, we skip.
+        // 1. Global Unsubscribe Guard
+        // If both marketing and price drops are disabled, user is globally unsubscribed.
+        if (settings && settings.marketing_emails === false && settings.price_drop_alerts === false) {
+          skippedAlerts.push(...alerts);
+          continue;
+        }
+
+        // 2. Specific Alert Type Guard (Price Drop) & Fail-safe
+        // If settings are missing (error/null) OR price_drop_alerts is not true, skip.
         const shouldSkip = settingsError || !settings || settings.price_drop_alerts !== true;
 
         if (shouldSkip) {
@@ -243,21 +249,8 @@ serve(async (req) => {
                   </td>
                 </tr>
 
-                <!-- Footer -->
-                <tr>
-                  <td style="padding:30px 40px;background:#f8fafc;text-align:center;">
-                    <p style="font-size:13px;color:#94a3b8;margin:0;line-height:1.6;">
-                      © 2026 LuxeStayHaven. All rights reserved.<br>
-                      Experience the extraordinary.
-                    </p>
-                    <p style="font-size:12px;color:#cbd5e1;margin:20px 0 0;">
-                      You are receiving this because you enabled price drop alerts.<br>
-                      <a href="${unsubAlertsUrl}" style="color:#94a3b8;text-decoration:underline;">Unsubscribe from price alerts</a> 
-                      &nbsp;|&nbsp; 
-                      <a href="${unsubAllUrl}" style="color:#94a3b8;text-decoration:underline;">Unsubscribe from all emails</a>
-                    </p>
-                  </td>
-                </tr>
+                ${generateEmailFooter(unsubAlertsUrl, unsubAllUrl)}
+
               </table>
             </td>
           </tr>
@@ -456,3 +449,24 @@ serve(async (req) => {
     });
   }
 });
+
+// Reusable Email Footer Helper
+function generateEmailFooter(unsubAlertsUrl: string, unsubAllUrl: string): string {
+  return `
+    <!-- Footer -->
+    <tr>
+      <td style="padding:30px 40px;background:#f8fafc;text-align:center;">
+        <p style="font-size:13px;color:#94a3b8;margin:0;line-height:1.6;">
+          © 2026 LuxeStayHaven. All rights reserved.<br>
+          Experience the extraordinary.
+        </p>
+        <p style="font-size:12px;color:#cbd5e1;margin:20px 0 0;">
+          You are receiving this because you enabled price drop alerts.<br>
+          <a href="${unsubAlertsUrl}" style="color:#94a3b8;text-decoration:underline;">Unsubscribe from price alerts</a> 
+          &nbsp;|&nbsp; 
+          <a href="${unsubAllUrl}" style="color:#94a3b8;text-decoration:underline;">Unsubscribe from all emails</a>
+        </p>
+      </td>
+    </tr>
+  `;
+}

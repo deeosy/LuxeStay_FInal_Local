@@ -71,8 +71,9 @@ serve(async (req) => {
     const url = new URL(req.url);
     const token = url.searchParams.get("token");
     const action = url.searchParams.get("action"); // 'unsubscribe_price_alerts' | 'unsubscribe_all'
+    const isResubscribe = url.searchParams.get("resubscribe") === "true";
 
-    if (!token || !action) {
+    if (!token || (!action && !isResubscribe)) {
       return new Response("Missing token or action", { status: 400 });
     }
 
@@ -94,19 +95,24 @@ serve(async (req) => {
     // Fetch current settings (may not exist)
     const { data: settings, error: fetchError } = await supabase
       .from('user_notification_settings')
-      .select('price_drop_alerts, marketing_emails, price_alert_frequency')
+      .select('price_drop_alerts, marketing_emails')
       .eq('user_id', userId)
-      .maybeSingle();  // ← Important: maybeSingle() returns null instead of error if no row
+      .maybeSingle();
 
     let updates: Record<string, any> = {};
+    let logAction = '';
 
-    if (action === 'unsubscribe_price_alerts') {
+    if (isResubscribe) {
+      updates.price_drop_alerts = true;
+      updates.marketing_emails = true;
+      logAction = 'resubscribe';
+    } else if (action === 'unsubscribe_price_alerts') {
       updates.price_drop_alerts = false;
+      logAction = 'price_alerts';
     } else if (action === 'unsubscribe_all') {
       updates.price_drop_alerts = false;
       updates.marketing_emails = false;
-      // Only set frequency if column exists
-      updates.price_alert_frequency = 'weekly'; // soft disable
+      logAction = 'all';
     }
 
     if (fetchError && fetchError.code !== 'PGRST116') {
@@ -117,9 +123,8 @@ serve(async (req) => {
       // No row exists — create one with safe defaults
       const defaultValues: Record<string, any> = {
         user_id: userId,
-        price_drop_alerts: action === 'unsubscribe_price_alerts' || action === 'unsubscribe_all' ? false : true,
-        marketing_emails: action === 'unsubscribe_all' ? false : true,
-        price_alert_frequency: action === 'unsubscribe_all' ? 'weekly' : 'instant',
+        price_drop_alerts: isResubscribe ? true : false,
+        marketing_emails: isResubscribe ? true : (action === 'unsubscribe_all' ? false : true),
         availability_alerts: false,
         deal_alerts: false,
       };
@@ -139,13 +144,43 @@ serve(async (req) => {
       if (updateError) throw updateError;
     }
 
+    // Log to Audit Table
+    await supabase.from('email_unsubscribe_events').insert({
+        user_id: userId,
+        action: logAction,
+        source: 'email_link'
+    });
+
     // Success HTML
     const actionText = action === 'unsubscribe_all' ? 'all emails' : 'price alerts';
+    const resubscribeUrl = `${url.origin}${url.pathname}?token=${token}&resubscribe=true`;
+
+    let htmlBody = '';
+    
+    if (isResubscribe) {
+       htmlBody = `
+          <h1>Subscribed! ✅</h1>
+          <p>You have successfully re-subscribed to price alerts and updates.</p>
+          <a href="https://luxestayhaven.com" class="btn">Return to LuxeStayHaven</a>
+       `;
+    } else {
+       htmlBody = `
+          <h1>Unsubscribed</h1>
+          <p>You have successfully unsubscribed from ${actionText}.</p>
+          <div style="margin-top: 2rem;">
+             <a href="https://luxestayhaven.com" class="btn">Return to Website</a>
+             <p style="margin-top: 1rem; font-size: 0.9rem;">
+               Mistake? <a href="${resubscribeUrl}" style="color: #666;">Undo and Re-subscribe</a>
+             </p>
+          </div>
+       `;
+    }
+
     const html = `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Unsubscribed</title>
+          <title>${isResubscribe ? 'Subscribed' : 'Unsubscribed'}</title>
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f9fafb; color: #111827; }
@@ -157,9 +192,7 @@ serve(async (req) => {
         </head>
         <body>
           <div class="card">
-            <h1>Unsubscribed</h1>
-            <p>You have successfully unsubscribed from ${actionText}.</p>
-            <a href="https://luxestayhaven.com" class="btn">Return to LuxeStayHaven</a>
+            ${htmlBody}
           </div>
         </body>
       </html>
