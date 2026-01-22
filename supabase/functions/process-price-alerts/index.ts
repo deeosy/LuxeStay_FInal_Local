@@ -1,11 +1,42 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { crypto } from "https://deno.land/std@0.177.0/crypto/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Crypto Helper for Token Generation
+async function generateUnsubscribeToken(userId: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const exp = Date.now() + 1000 * 60 * 60 * 24 * 30; // 30 days
+  const payloadStr = `${userId}:${exp}`;
+  const payloadB64 = uint8ArrayToBase64Url(encoder.encode(payloadStr));
+
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(payloadB64)
+  );
+  
+  const signatureB64 = uint8ArrayToBase64Url(new Uint8Array(signature));
+  return `${payloadB64}.${signatureB64}`;
+}
+
+function uint8ArrayToBase64Url(uint8Array: Uint8Array): string {
+  const base64 = btoa(String.fromCharCode(...uint8Array));
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -20,7 +51,7 @@ serve(async (req) => {
   let jobRunId: string | null = null;
   let jobStatus = 'running';
   let processedCount = 0;
-  let successCount = 0;
+  let emailsSentCount = 0;
   let failureCount = 0;
   let deadCount = 0;
   let skippedCount = 0;
@@ -102,6 +133,17 @@ serve(async (req) => {
       const alerts = groups[groupKey];
       const alertIds = alerts.map((a: any) => a.id);
 
+      const unsubscribeToken = await generateUnsubscribeToken(
+        alerts[0].user_id,
+        supabaseServiceKey
+      );
+
+      const baseUrl = "https://cyopwkfinqpsnnpqmmkb.supabase.co/functions/v1/manage-subscription";
+
+      const unsubAlertsUrl = `${baseUrl}?token=${unsubscribeToken}&action=unsubscribe_price_alerts`;
+      const unsubAllUrl = `${baseUrl}?token=${unsubscribeToken}&action=unsubscribe_all`;
+
+
       try {
         // Preference Check
         const { data: settings, error: settingsError } = await supabase
@@ -149,11 +191,35 @@ serve(async (req) => {
             <h2 style="color: #111827;">Price Drop Alert! 📉</h2>
             <p>Good news! Prices have dropped for hotels you are watching.</p>
             ${alertsHtml}
-            <p style="color: #6b7280; font-size: 12px; margin-top: 24px;">
-              You are receiving this because you enabled price alerts on LuxeStay.
-            </p>
+            <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; text-align: center;">
+              <p>You are receiving this because you enabled price alerts on LuxeStay.</p>
+              <p>
+                <a href="${unsubAlertsUrl}" style="color: #6b7280; text-decoration: underline;">Unsubscribe from Price Alerts</a>
+                &nbsp;|&nbsp;
+                <a href="${unsubAllUrl}" style="color: #6b7280; text-decoration: underline;">Unsubscribe from All Emails</a>
+              </p>
+            </div>
           </div>
         `;
+
+        const userId = alerts[0].user_id;
+        const today = new Date().toISOString().slice(0, 10);
+
+        // Fetch current send count
+        const { data: sendLog } = await supabase
+          .from('user_email_send_log')
+          .select('count')
+          .eq('user_id', userId)
+          .eq('sent_date', today)
+          .maybeSingle();
+
+        const currentCount = sendLog?.count ?? 0;
+
+        // Enforce daily limit (MAX = 3)
+        if (currentCount >= 3) {
+          skippedAlerts.push(...alerts);
+          continue;
+        }
 
         const { error: emailError } = await resend.emails.send({
           from: 'LuxeStay Alerts <onboarding@resend.dev>',
@@ -166,8 +232,9 @@ serve(async (req) => {
           console.error("Resend Error:", emailError);
           failedAlerts.push(...alerts);
         } else {
-          successCount += 1;
+          emailsSentCount += 1;
           successIds.push(...alertIds);
+
 
           // Increment rate limit log
           // Upsert: if row exists, increment count; if not, insert count=1
@@ -193,7 +260,7 @@ serve(async (req) => {
     // Success Updates
     if (successIds.length > 0) {
       
-       // successCount is tracked per email sent
+       // emailsSentCount is tracked per email sent
        const successByRetryCount: Record<string, string[]> = {};
        const idToRetryCount: Record<string, number> = {};
        pendingRows.forEach((r: any) => idToRetryCount[r.id] = r.retry_count || 0);
@@ -274,7 +341,7 @@ serve(async (req) => {
     // Determine Final Job Status
     if (failureCount === 0) {
       jobStatus = 'success';
-    } else if (successCount > 0) {
+    } else if (emailsSentCount > 0) {
       jobStatus = 'partial';
     } else {
       jobStatus = 'failed';
@@ -286,7 +353,7 @@ serve(async (req) => {
         status: jobStatus,
         finished_at: now,
         processed_count: processedCount,
-        success_count: successCount,
+        success_count: emailsSentCount,
         failure_count: failureCount,
         dead_count: deadCount,
         skipped_count: skippedCount
@@ -297,7 +364,7 @@ serve(async (req) => {
       jobRunId,
       status: jobStatus,
       totalGroups: groupKeys.length,
-      successCount,
+      emailsSentCount,
       failureCount,
       deadCount,
       skippedCount
