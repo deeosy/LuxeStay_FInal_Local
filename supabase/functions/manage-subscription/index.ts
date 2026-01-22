@@ -61,6 +61,7 @@ function base64UrlToUint8Array(base64Url: string): Uint8Array {
   return outputArray;
 }
 
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -72,18 +73,15 @@ serve(async (req) => {
     const action = url.searchParams.get("action"); // 'unsubscribe_price_alerts' | 'unsubscribe_all'
 
     if (!token || !action) {
-      return new Response("Missing parameters", { status: 400 });
+      return new Response("Missing token or action", { status: 400 });
     }
 
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      supabaseServiceKey
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify Token
     const payload = await verifyToken(token, supabaseServiceKey);
-    
     if (!payload) {
       return new Response("Invalid or expired link.", { 
         status: 403,
@@ -93,26 +91,56 @@ serve(async (req) => {
 
     const { userId } = payload;
 
-    // Update DB
-    const updates: any = {};
+    // Fetch current settings (may not exist)
+    const { data: settings, error: fetchError } = await supabase
+      .from('user_notification_settings')
+      .select('price_drop_alerts, marketing_emails, price_alert_frequency')
+      .eq('user_id', userId)
+      .maybeSingle();  // ← Important: maybeSingle() returns null instead of error if no row
+
+    let updates: Record<string, any> = {};
+
     if (action === 'unsubscribe_price_alerts') {
       updates.price_drop_alerts = false;
     } else if (action === 'unsubscribe_all') {
       updates.price_drop_alerts = false;
       updates.marketing_emails = false;
-      updates.price_alert_frequency = 'weekly'; // Downgrade frequency as soft disable
+      // Only set frequency if column exists
+      updates.price_alert_frequency = 'weekly'; // soft disable
     }
 
-    const { error } = await supabase
-      .from('user_notification_settings')
-      .update(updates)
-      .eq('user_id', userId);
-
-    if (error) {
-      throw error;
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError; // real error
     }
 
-    // Return HTML Success Page
+    if (!settings) {
+      // No row exists — create one with safe defaults
+      const defaultValues: Record<string, any> = {
+        user_id: userId,
+        price_drop_alerts: action === 'unsubscribe_price_alerts' || action === 'unsubscribe_all' ? false : true,
+        marketing_emails: action === 'unsubscribe_all' ? false : true,
+        price_alert_frequency: action === 'unsubscribe_all' ? 'weekly' : 'instant',
+        availability_alerts: false,
+        deal_alerts: false,
+      };
+
+      const { error: insertError } = await supabase
+        .from('user_notification_settings')
+        .insert(defaultValues);
+
+      if (insertError) throw insertError;
+    } else {
+      // Row exists — update only the fields we want
+      const { error: updateError } = await supabase
+        .from('user_notification_settings')
+        .update(updates)
+        .eq('user_id', userId);
+
+      if (updateError) throw updateError;
+    }
+
+    // Success HTML
+    const actionText = action === 'unsubscribe_all' ? 'all emails' : 'price alerts';
     const html = `
       <!DOCTYPE html>
       <html>
@@ -121,17 +149,17 @@ serve(async (req) => {
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f9fafb; color: #111827; }
-            .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 400px; text-align: center; }
-            h1 { margin-bottom: 1rem; font-size: 1.5rem; }
-            p { color: #6b7280; margin-bottom: 1.5rem; }
-            .btn { display: inline-block; background: #000; color: white; padding: 0.5rem 1rem; text-decoration: none; border-radius: 4px; font-size: 0.875rem; }
+            .card { background: white; padding: 3rem; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); max-width: 420px; text-align: center; }
+            h1 { margin-bottom: 1rem; font-size: 1.8rem; color: #1e293b; }
+            p { color: #475569; margin-bottom: 2rem; font-size: 1.1rem; line-height: 1.6; }
+            .btn { display: inline-block; background: #000; color: white; padding: 0.75rem 1.5rem; text-decoration: none; border-radius: 8px; font-size: 1rem; font-weight: 500; }
           </style>
         </head>
         <body>
           <div class="card">
             <h1>Unsubscribed</h1>
-            <p>You have successfully unsubscribed from ${action === 'unsubscribe_all' ? 'all emails' : 'price alerts'}.</p>
-            <a href="https://luxestayhaven.com" class="btn">Return to LuxeStay</a>
+            <p>You have successfully unsubscribed from ${actionText}.</p>
+            <a href="https://luxestayhaven.com" class="btn">Return to LuxeStayHaven</a>
           </div>
         </body>
       </html>
@@ -143,6 +171,10 @@ serve(async (req) => {
     });
 
   } catch (err: any) {
-    return new Response(`Error: ${err.message}`, { status: 500 });
+    console.error("Unsubscribe error:", err);
+    return new Response(`Error: ${err.message}`, { 
+      status: 500,
+      headers: { "Content-Type": "text/plain" }
+    });
   }
 });
