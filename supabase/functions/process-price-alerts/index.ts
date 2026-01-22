@@ -222,7 +222,7 @@ serve(async (req) => {
         }
 
         const { error: emailError } = await resend.emails.send({
-          from: 'LuxeStay Alerts <onboarding@resend.dev>',
+          from: 'LuxeStay Alerts <alerts@luxestayhaven.com>',
           to: email,
           subject: `Price Drop Alert: ${alerts.length} hotel${alerts.length > 1 ? 's' : ''} on sale!`,
           html: html,
