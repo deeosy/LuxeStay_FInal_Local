@@ -345,6 +345,23 @@ const HotelDetail = () => {
     };
   }, [hotel, canShowExit, citySlugFromParams, location]);
 
+  // Affiliate Logic - MOVED UP before conditional returns to fix React Hook Error
+  const affiliateParams = useMemo(() => {
+     if (!hotel?.liteApiId) return '';
+     return new URLSearchParams({
+      city: hotel.city || hotel.location || 'unknown',
+      hotel: hotel.name || 'hotel',
+      price: hotel.price ? hotel.price.toString() : '0',
+      page: location.pathname,
+      checkIn: checkIn || '',
+      checkOut: checkOut || '',
+      guests: guests ? guests.toString() : '',
+      rooms: rooms ? rooms.toString() : '',
+    }).toString();
+  }, [hotel, location.pathname, checkIn, checkOut, guests, rooms]);
+
+  const affiliateLink = hotel?.liteApiId ? `/go/hotel/${hotelId}?${affiliateParams}` : null;
+
   if (isLiteApiHotel && loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -372,23 +389,6 @@ const HotelDetail = () => {
       </div>
     );
   }
-
-// Affiliate Logic
-  const affiliateParams = useMemo(() => {
-     if (!hotel?.liteApiId) return '';
-     return new URLSearchParams({
-      city: hotel.city || hotel.location || 'unknown',
-      hotel: hotel.name || 'hotel',
-      price: hotel.price ? hotel.price.toString() : '0',
-      page: location.pathname,
-      checkIn: checkIn || '',
-      checkOut: checkOut || '',
-      guests: guests ? guests.toString() : '',
-      rooms: rooms ? rooms.toString() : '',
-    }).toString();
-  }, [hotel, location.pathname, checkIn, checkOut, guests, rooms]);
-
-  const affiliateLink = hotel?.liteApiId ? `/go/hotel/${hotelId}?${affiliateParams}` : null;
 
   const handleBookNow = () => {
     const hotelIdForUrl = hotel.liteApiId || hotel.id;
