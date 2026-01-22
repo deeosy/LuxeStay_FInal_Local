@@ -173,33 +173,95 @@ serve(async (req) => {
         
         // HTML Construction
         const alertsHtml = alerts.map((alert: any) => `
-          <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; font-family: sans-serif;">
-            <h3 style="margin: 0 0 8px 0; color: #111827;">Hotel #${alert.hotel_id}</h3>
-            <p style="margin: 0 0 8px 0; color: #4b5563;">
-              Price dropped by <strong style="color: #059669;">${alert.drop_percent}%</strong>
-            </p>
-            <div style="margin-bottom: 12px;">
-              <span style="text-decoration: line-through; color: #9ca3af;">$${alert.previous_price}</span>
-              <span style="font-weight: bold; color: #059669; font-size: 1.1em; margin-left: 8px;">$${alert.new_price}</span>
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:32px;margin-bottom:32px;box-shadow:0 4px 12px rgba(0,0,0,0.04);text-align:left;">
+            <!-- Hotel Title -->
+            <h3 style="font-size:20px;color:#1e293b;margin:0 0 16px;font-weight:500;">
+              Hotel #${alert.hotel_id}
+            </h3>
+
+            <!-- Price Drop Highlight -->
+            <div style="margin-bottom:24px;">
+              <p style="font-size:17px;color:#475569;margin:0;line-height:1.6;">
+                Price dropped by 
+                <span style="font-size:24px;font-weight:700;color:#059669;">
+                  ${alert.drop_percent.toFixed(1)}%
+                </span>
+              </p>
             </div>
-            <a href="https://luxestayhaven.com/hotel/${alert.hotel_id}" style="display: inline-block; background-color: #000; color: #fff; padding: 8px 16px; text-decoration: none; border-radius: 4px; font-size: 14px;">View Deal</a>
+
+            <!-- Prices -->
+            <div style="margin-bottom:32px;">
+              <span style="font-size:20px;text-decoration:line-through;color:#94a3b8;">
+                $${alert.previous_price}
+              </span>
+              <span style="font-size:36px;font-weight:700;color:#059669;margin-left:16px;">
+                $${alert.new_price}
+              </span>
+              <span style="font-size:16px;color:#64748b;margin-left:8px;">/night</span>
+            </div>
+
+            <!-- CTA Button -->
+            <a href="https://luxestayhaven.com/hotel/${alert.hotel_id}"
+              style="display:inline-block;padding:16px 40px;background-color:#d49c39;color:#000000;font-size:17px;font-weight:500;text-decoration:none;border-radius:12px;letter-spacing:0.5px;">
+              View Deal
+            </a>
           </div>
         `).join('');
 
         const html = `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #111827;">Price Drop Alert! 📉</h2>
-            <p>Good news! Prices have dropped for hotels you are watching.</p>
-            ${alertsHtml}
-            <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; text-align: center;">
-              <p>You are receiving this because you enabled price alerts on LuxeStay.</p>
-              <p>
-                <a href="${unsubAlertsUrl}" style="color: #6b7280; text-decoration: underline;">Unsubscribe from Price Alerts</a>
-                &nbsp;|&nbsp;
-                <a href="${unsubAllUrl}" style="color: #6b7280; text-decoration: underline;">Unsubscribe from All Emails</a>
-              </p>
-            </div>
-          </div>
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f9f9f9;padding:40px 20px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+          <tr>
+            <td align="center">
+              <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.05);">
+                <!-- Header -->
+                <tr>
+                  <td align="center" style="padding:40px 20px;background:#3c2c20;">
+                    <h1 style="color:#ffffff;font-size:28px;margin:0;font-weight:300;letter-spacing:2px;">
+                      LuxeStayHaven
+                    </h1>
+                    <p style="color:#e2e8f0;margin:8px 0 0;font-size:14px;letter-spacing:1px;">
+                      Curated Luxury Stays Worldwide
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Main Content -->
+                <tr>
+                  <td style="padding:50px 40px;text-align:center;">
+                    <h2 style="font-size:26px;color:#1e293b;margin:0 0 20px;font-weight:500;">
+                      Price Drop Alert! 📉
+                    </h2>
+                    <p style="font-size:17px;color:#475569;line-height:1.6;margin:0 0 30px;">
+                      Great news — ${alerts.length} luxury hotel${alerts.length > 1 ? 's' : ''} you’re watching just got cheaper.
+                    </p>
+
+                    ${alertsHtml}
+
+                    <p style="font-size:15px;color:#64748b;margin:40px 0 30px;line-height:1.6;">
+                      Don’t miss out — these rates can change quickly.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                  <td style="padding:30px 40px;background:#f8fafc;text-align:center;">
+                    <p style="font-size:13px;color:#94a3b8;margin:0;line-height:1.6;">
+                      © 2026 LuxeStayHaven. All rights reserved.<br>
+                      Experience the extraordinary.
+                    </p>
+                    <p style="font-size:12px;color:#cbd5e1;margin:20px 0 0;">
+                      You are receiving this because you enabled price drop alerts.<br>
+                      <a href="${unsubAlertsUrl}" style="color:#94a3b8;text-decoration:underline;">Unsubscribe from price alerts</a> 
+                      &nbsp;|&nbsp; 
+                      <a href="${unsubAllUrl}" style="color:#94a3b8;text-decoration:underline;">Unsubscribe from all emails</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
         `;
 
         const userId = alerts[0].user_id;
