@@ -9,7 +9,7 @@ import { useLiteApiSearch } from '@/hooks/useLiteApiHotels';
 import { useSavedHotelIds } from '@/hooks/useSavedHotelIds';
 import useBookingStore from '@/stores/useBookingStore';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
-import { Search, SlidersHorizontal, MapPin, X, Calendar, Users, Loader2, Wifi, Waves, Sparkles, Dumbbell, Utensils, Car, Wind, Coffee } from 'lucide-react';
+import { Search, SlidersHorizontal, MapPin, X, Calendar, Users, Loader2, Wifi, Waves, Sparkles, Dumbbell, Utensils, Car, Wind, Coffee, Minus, Plus, ChevronDown } from 'lucide-react';
 import SessionDealReminder from '@/components/SessionDealReminder';
 
 const SearchResults = () => {
@@ -23,15 +23,20 @@ const SearchResults = () => {
     checkIn, 
     checkOut, 
     guests,
+    rooms,
     setDestination,
     setCheckIn,
     setCheckOut,
     setGuests,
+    setRooms,
     setSearchParams: setStoreParams,
   } = useBookingStore();
 
+  const [isRoomConfigOpen, setIsRoomConfigOpen] = useState(false);
+
   // UI-only local state for filters and visual controls
   const [searchQuery, setSearchQuery] = useState('');
+  const [isRoomConfigOpen, setIsRoomConfigOpen] = useState(false);
   const [priceRange, setPriceRange] = useState([0, 3000]);
   const [selectedRating, setSelectedRating] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -57,6 +62,7 @@ const SearchResults = () => {
     const urlCheckIn = searchParams.get('checkIn') || '';
     const urlCheckOut = searchParams.get('checkOut') || '';
     const urlGuests = parseInt(searchParams.get('guests')) || 2;
+    const urlRooms = parseInt(searchParams.get('rooms')) || 1;
 
     // Update store from URL params
     setStoreParams({
@@ -64,6 +70,7 @@ const SearchResults = () => {
       checkIn: urlCheckIn || checkIn,
       checkOut: urlCheckOut || checkOut,
       guests: urlGuests || guests,
+      rooms: urlRooms || rooms,
     });
 
     // Set local search query from URL or store
@@ -80,12 +87,13 @@ const SearchResults = () => {
     if (checkIn) params.checkIn = checkIn;
     if (checkOut) params.checkOut = checkOut;
     if (guests && guests !== 2) params.guests = guests.toString();
+    if (rooms && rooms !== 1) params.rooms = rooms.toString();
 
     navigate({
       pathname: '/search',
       search: createSearchParams(params).toString(),
     }, { replace: true });
-  }, [destination, checkIn, checkOut, guests, isInitialized]);
+  }, [destination, checkIn, checkOut, guests, rooms, isInitialized]);
 
   // Sync local search query with global destination
   useEffect(() => {
@@ -181,8 +189,8 @@ const liteSearchParams = useMemo(() => {
   }
 
   // Fallback to text-based search if we have a destination
-const targetDestination = resolvedCity ? `${resolvedCity.cityName}, ${resolvedCity.country}` : destination || searchQuery;  
-if (targetDestination) {
+  const targetDestination = resolvedCity ? `${resolvedCity.cityName}, ${resolvedCity.country}` : destination || searchQuery;  
+  if (targetDestination) {
     return {
       destination: targetDestination,
       checkIn,
@@ -193,7 +201,7 @@ if (targetDestination) {
   }
 
   return { enabled: false };
-}, [resolvedCity, destination, searchQuery, checkIn, checkOut, guests, isInitialized]);
+}, [resolvedCity, destination, searchQuery, checkIn, checkOut, guests, rooms, isInitialized]);
 
   const { hotels: liteApiHotels, loading: liteApiLoading, error: liteApiError, source } =
   useLiteApiSearch(liteSearchParams);
@@ -387,20 +395,85 @@ if (targetDestination) {
                 />
               </div>
 
-              {/* Guests - reads/writes to global store */}
+              {/* Rooms & Guests Configuration */}
               <div className="relative">
                 <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <select
-                  value={guests}
-                  onChange={(e) => setGuests(parseInt(e.target.value))}
-                  className="w-full pl-10 pr-3 py-2.5 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 cursor-pointer appearance-none"
+                <button
+                  onClick={() => setIsRoomConfigOpen(!isRoomConfigOpen)}
+                  className="w-full pl-10 pr-3 py-2.5 bg-background border border-border rounded-md text-sm text-left focus:outline-none focus:ring-2 focus:ring-accent/20 flex items-center justify-between"
                 >
-                  {[1, 2, 3, 4, 5, 6].map((num) => (
-                    <option key={num} value={num}>
-                      {num} {num === 1 ? 'Guest' : 'Guests'}
-                    </option>
-                  ))}
-                </select>
+                  <span>
+                    {rooms} Room{rooms > 1 ? 's' : ''}, {guests} Guest{guests > 1 ? 's' : ''}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${isRoomConfigOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Room Config Popover */}
+                {isRoomConfigOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-2 p-4 bg-card border border-border rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-medium text-sm">Configuring Rooms</h3>
+                      <button 
+                        onClick={() => setIsRoomConfigOpen(false)}
+                        className="text-xs text-accent hover:underline"
+                      >
+                        Done
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Rooms Counter */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Rooms</span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setRooms(Math.max(1, rooms - 1))}
+                            disabled={rooms <= 1}
+                            className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-4 text-center text-sm font-medium">{rooms}</span>
+                          <button
+                            onClick={() => setRooms(Math.min(10, rooms + 1))}
+                            className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Guests Counter */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Guests</span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setGuests(Math.max(1, guests - 1))}
+                            disabled={guests <= 1}
+                            className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-4 text-center text-sm font-medium">{guests}</span>
+                          <button
+                            onClick={() => setGuests(Math.min(20, guests + 1))}
+                            className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Backdrop to close when clicking outside */}
+                {isRoomConfigOpen && (
+                  <div 
+                    className="fixed inset-0 z-40 bg-transparent"
+                    onClick={() => setIsRoomConfigOpen(false)}
+                  />
+                )}
               </div>
             </div>
           </div>
