@@ -32,8 +32,6 @@ const SearchResults = () => {
     setSearchParams: setStoreParams,
   } = useBookingStore();
 
-  const [isRoomConfigOpen, setIsRoomConfigOpen] = useState(false);
-
   // UI-only local state for filters and visual controls
   const [searchQuery, setSearchQuery] = useState('');
   const [isRoomConfigOpen, setIsRoomConfigOpen] = useState(false);
