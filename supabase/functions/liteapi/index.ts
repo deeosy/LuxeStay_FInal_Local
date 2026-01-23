@@ -597,6 +597,48 @@ serve(async (req) => {
       if (checkIn && checkOut) {
         const ratesData = await getHotelRates(apiKey, [hotelId], checkIn, checkOut, guests, rooms);
         if (ratesData.length > 0) {
+          // --- DETAIL OBSERVABILITY START ---
+          const result = ratesData[0];
+          console.log('\n--- LITEAPI DETAIL RATES INSPECTION ---');
+          console.log(`Has 'rooms' array? ${!!result.rooms}`);
+          console.log(`Has 'roomTypes' array? ${!!result.roomTypes}`);
+
+          if (result.roomTypes) {
+            console.log(`Source: roomTypes (Count: ${result.roomTypes.length})`);
+            const firstRoom = result.roomTypes[0];
+            console.log(`[First RoomType] ID: ${firstRoom.roomTypeId || firstRoom.id}`);
+            console.log(`  Name: ${firstRoom.name}`);
+            console.log(`  Rates count: ${firstRoom.rates?.length || 0}`);
+            
+            if (firstRoom.rates?.length > 0) {
+              const r = firstRoom.rates[0];
+              console.log(`  Rate #1 fields:`);
+              console.log(`    - net: ${JSON.stringify(r.net || 'missing')}`);
+              console.log(`    - retail: ${JSON.stringify(r.retail || r.retailRate || 'missing')}`);
+              console.log(`    - currency: ${r.currency || 'missing'}`);
+              console.log(`    - boardType: ${r.boardType || 'missing'}`);
+              console.log(`    - cancellation: ${!!r.cancellationPolicies}`);
+            }
+          } else if (result.rooms) {
+            console.log(`Source: rooms (Count: ${result.rooms.length})`);
+            const firstRoom = result.rooms[0];
+            console.log(`[First Room] ID: ${firstRoom.roomId || firstRoom.id}`);
+            console.log(`  Name: ${firstRoom.name}`);
+            console.log(`  Rates count: ${firstRoom.rates?.length || 0}`);
+            
+            if (firstRoom.rates?.length > 0) {
+              const r = firstRoom.rates[0];
+              console.log(`  Rate #1 fields:`);
+              console.log(`    - net: ${JSON.stringify(r.net || 'missing')}`);
+              console.log(`    - retail: ${JSON.stringify(r.retail || r.retailRate || 'missing')}`);
+              console.log(`    - currency: ${r.currency || 'missing'}`);
+              console.log(`    - boardType: ${r.boardType || 'missing'}`);
+              console.log(`    - cancellation: ${!!r.cancellationPolicies}`);
+            }
+          }
+          console.log('--- DETAIL INSPECTION END ---\n');
+          // --- DETAIL OBSERVABILITY END ---
+
           hotel = normalizeHotel(
             ratesData[0].hotelData || detailData.data,
             ratesData[0]
