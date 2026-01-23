@@ -27,7 +27,10 @@ export async function handler(event) {
       console.warn("Supabase credentials missing in redirect-hotel function");
     }
 
-    const LITEAPI_KEY = process.env.LITEAPI_KEY_SANDBOX || process.env.VITE_LITEAPI_KEY;
+const LITEAPI_KEY =
+  process.env.LITE_API_KEY_PROD ||
+  process.env.VITE_LITEAPI_KEY ||
+  process.env.LITEAPI_KEY_SANDBOX;
     
     // Default Fallback: Redirect to the hotel detail page on the site
     // We avoid constructing a direct API URL with the key to prevent exposing secrets
@@ -58,7 +61,7 @@ export async function handler(event) {
             const res = await fetch(ratesUrl, {
                 method: 'POST',
                 headers: {
-                    'X-API-Key': LITEAPI_KEY,
+                    'X-API-Key': LITEAPI_KEY, 
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(body)
@@ -157,8 +160,12 @@ export async function handler(event) {
   } catch (error) {
     console.error("Redirect Error:", error);
     // Ultimate Fallback
-    const LITEAPI_KEY = process.env.LITEAPI_KEY_SANDBOX || process.env.VITE_LITEAPI_KEY;
-    const url = `https://api.liteapi.travel/v3/hotels/${event.path.split("/").pop()}/book?apiKey=${LITEAPI_KEY}`;
+const LITEAPI_KEY =
+  process.env.LITE_API_KEY_PROD ||
+  process.env.VITE_LITEAPI_KEY ||
+  process.env.LITEAPI_KEY_SANDBOX;
+
+      const url = `https://api.liteapi.travel/v3/hotels/${event.path.split("/").pop()}/book?apiKey=${LITEAPI_KEY}`;
     
     return {
       statusCode: 302,

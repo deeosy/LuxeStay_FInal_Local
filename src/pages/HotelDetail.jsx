@@ -27,7 +27,10 @@ import {
   Check,
   Loader2,
   TrendingUp,
-  ArrowRightCircle
+  ArrowRightCircle,
+  Minus,
+  Plus,
+  ChevronDown
 } from 'lucide-react';
 import SEOMetadata from '@/components/seo/SEOMetadata';
 import { useIndexing } from '@/hooks/useIndexing';
@@ -110,6 +113,7 @@ const HotelDetail = () => {
     setCheckIn,
     setCheckOut,
     setGuests,
+    setRooms,
     setSelectedHotel,
     getNights,
   } = useBookingStore();
@@ -121,6 +125,7 @@ const HotelDetail = () => {
   const initialized = useAuthStore((state) => state.initialized);
   const { isHotelSaved, toggleHotelSaved } = useSavedHotelIds();
   const [isToggling, setIsToggling] = useState(false);
+  const [isRoomConfigOpen, setIsRoomConfigOpen] = useState(false);
   const impressionFired = useRef(false);
   const [showExitIntent, setShowExitIntent] = useState(false);
   const [canShowExit, setCanShowExit] = useState(false);
@@ -772,21 +777,96 @@ const HotelDetail = () => {
 
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1">
-                      Guests
+                      Rooms & Guests
                     </label>
-                    <select
-                      value={Math.min(guests, maxGuests)}
-                      onChange={(e) => setGuests(parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 cursor-pointer"
-                    >
-                      {Array.from({ length: maxGuests }, (_, i) => i + 1).map(
-                        (num) => (
-                          <option key={num} value={num}>
-                            {num} {num === 1 ? 'Guest' : 'Guests'}
-                          </option>
-                        )
+                    <div className="relative">
+                      <button
+                        onClick={() => setIsRoomConfigOpen(!isRoomConfigOpen)}
+                        className="w-full px-3 py-2 border border-border rounded-md text-sm text-left focus:outline-none focus:ring-2 focus:ring-accent/20 flex items-center justify-between bg-background"
+                      >
+                        <span>
+                          {rooms} Room{rooms > 1 ? 's' : ''}, {guests} Guest{guests > 1 ? 's' : ''}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${isRoomConfigOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Room Config Popover */}
+                      {isRoomConfigOpen && (
+                        <>
+                          <div 
+                            className="fixed inset-0 z-40 bg-transparent"
+                            onClick={() => setIsRoomConfigOpen(false)}
+                          />
+                          <div className="absolute top-full left-0 right-0 mt-2 p-4 bg-card border border-border rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="font-medium text-sm">Configuring Rooms</h3>
+                              <button 
+                                onClick={() => setIsRoomConfigOpen(false)}
+                                className="text-xs text-accent hover:underline"
+                              >
+                                Done
+                              </button>
+                            </div>
+
+                            <div className="space-y-4">
+                              {/* Rooms Counter */}
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-muted-foreground">Rooms</span>
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setRooms(Math.max(1, rooms - 1));
+                                    }}
+                                    disabled={rooms <= 1}
+                                    className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+                                  <span className="w-4 text-center text-sm font-medium">{rooms}</span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setRooms(Math.min(10, rooms + 1));
+                                    }}
+                                    className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary transition-colors"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Guests Counter */}
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-muted-foreground">Guests</span>
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setGuests(Math.max(1, guests - 1));
+                                    }}
+                                    disabled={guests <= 1}
+                                    className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </button>
+                                  <span className="w-4 text-center text-sm font-medium">{guests}</span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setGuests(Math.min(20, guests + 1));
+                                    }}
+                                    className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary transition-colors"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </>
                       )}
-                    </select>
+                    </div>
                   </div>
                 </div>
 
