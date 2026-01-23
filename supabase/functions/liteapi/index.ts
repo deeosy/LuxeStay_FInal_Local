@@ -46,29 +46,68 @@ function setCache(key: string, data: any, ttl: number): void {
 function normalizeHotel(hotel: any, rates?: any) {
   // 1. Dig deep into the rates structure
   // Handle both 'rooms' (legacy/some endpoints) and 'roomTypes' (v3 standard)
-  const firstRoom = rates?.rooms?.[0] || rates?.roomTypes?.[0];
-  const firstRate = firstRoom?.rates?.[0];
+  const availableRooms = rates?.roomTypes || rates?.rooms || [];
 
-  // 2. Identify the PRICE
-  let price = 0;
-  if (firstRate?.retailRate?.total?.amount) {
-    price = Math.round(firstRate.retailRate.total.amount / (rates?.nights || 1));
-  } else if (firstRate?.retailRate?.amount) {
-    price = Math.round(firstRate.retailRate.amount / (rates?.nights || 1));
-  } else if (hotel.pricePerNight) {
-    price = hotel.pricePerNight;
+  // 2. Identify the LOWEST PRICE from ALL rooms (White-Label Logic)
+  // Instead of just taking the first room, we scan all rooms to find the best deal.
+  // This ensures price is never 0 unless truly unavailable.
+  
+  let lowestPrice = Infinity;
+  let bestBookingUrl = null;
+  const normalizedRooms: any[] = [];
+
+  availableRooms.forEach((room: any) => {
+    const roomRates = room.rates || [];
+    
+    roomRates.forEach((rate: any) => {
+      // Calculate nightly price
+      let nightlyPrice = 0;
+      if (rate.retailRate?.total?.amount) {
+        nightlyPrice = Math.round(rate.retailRate.total.amount / (rates?.nights || 1));
+      } else if (rate.retailRate?.amount) {
+        nightlyPrice = Math.round(rate.retailRate.amount / (rates?.nights || 1));
+      } else if (rate.retail?.total?.amount) {
+         // Some v3 endpoints use 'retail' instead of 'retailRate'
+        nightlyPrice = Math.round(rate.retail.total.amount / (rates?.nights || 1));
+      }
+
+      if (nightlyPrice > 0 && nightlyPrice < lowestPrice) {
+        lowestPrice = nightlyPrice;
+        
+        // Update best booking URL based on the cheapest rate
+        bestBookingUrl = 
+          rate.booking_url || 
+          rate.deeplink || 
+          rate.paymentUrl || 
+          rate.bookingUrl ||
+          null;
+      }
+
+      // Add to normalized rooms list (for potential UI use)
+      normalizedRooms.push({
+        id: room.roomTypeId || room.roomId || room.id,
+        name: room.name,
+        price: nightlyPrice,
+        currency: rate.currency || 'USD',
+        cancellation: !!rate.cancellationPolicies,
+        board: rate.boardType || 'Room Only',
+        bookingUrl: rate.booking_url || rate.deeplink || rate.paymentUrl || rate.bookingUrl
+      });
+    });
+  });
+
+  // Fallback if no rates found
+  if (lowestPrice === Infinity) {
+    lowestPrice = hotel.pricePerNight || 0;
   }
 
   // 3. PRIORITY URL MAPPING (Crucial for live bookings)
-  // We ignore hotel.booking_url because it's usually the sandbox fallback
-  // Extract booking URL from various potential locations in LiteAPI response
+  // If we didn't find a specific rate URL, fall back to hotel-level URLs
   const bookingUrl = 
+    bestBookingUrl ||
     hotel.booking_url || 
     hotel.deeplink || 
     hotel.partner_booking_url || 
-    firstRate?.booking_url ||
-    firstRate?.deeplink ||
-    firstRate?.paymentUrl ||
     null;
 
   return {
@@ -78,8 +117,8 @@ function normalizeHotel(hotel: any, rates?: any) {
     location: [hotel.city, hotel.country].filter(Boolean).join(', ') || hotel.address || 'Unknown Location',
     city: hotel.city,
     country: hotel.country,
-    price: price,
-    bookingUrl, // This will now be passed to your React frontend
+    price: lowestPrice, // Now strictly the cheapest available rate
+    bookingUrl, 
     rating: hotel.starRating || hotel.rating || 4.5,
     reviews: hotel.reviewsCount || Math.floor(Math.random() * 500) + 50,
     image: hotel.main_photo || hotel.mainPhoto || hotel.images?.[0]?.url || hotel.images?.[0] || '/placeholder.svg',
@@ -93,6 +132,7 @@ function normalizeHotel(hotel: any, rates?: any) {
     latitude: hotel.latitude,
     longitude: hotel.longitude,
     rawData: { hotel, rates },
+    rooms: normalizedRooms, // Expose full room list for white-label UI
   };
 }
 
