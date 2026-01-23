@@ -405,6 +405,34 @@ serve(async (req) => {
         const hotelIds = hotelData.map(h => h.id || h.hotelId).filter(Boolean).slice(0, 10);
         const ratesData = await getHotelRates(apiKey, hotelIds, checkIn, checkOut, guests, rooms);
 
+        // --- OBSERVABILITY START ---
+        if (ratesData.length > 0) {
+          console.log('\n--- LITEAPI PRICING INSPECTION ---');
+          const sample = ratesData[0];
+          console.log(`Hotel ID: ${sample.hotelId}`);
+          console.log(`Has 'rooms' array? ${!!sample.rooms} (Length: ${sample.rooms?.length || 0})`);
+          console.log(`Has 'roomTypes' array? ${!!sample.roomTypes} (Length: ${sample.roomTypes?.length || 0})`);
+          
+          const roomSource = sample.roomTypes || sample.rooms || [];
+          roomSource.slice(0, 3).forEach((room: any, idx: number) => {
+            console.log(`\n[Room #${idx + 1}] ID: ${room.roomTypeId || room.roomId || 'N/A'}`);
+            console.log(`  Name: ${room.name || 'N/A'}`);
+            console.log(`  Rates count: ${room.rates?.length || 0}`);
+            
+            if (room.rates?.length > 0) {
+              const r = room.rates[0];
+              console.log(`  Rate #1 fields:`);
+              console.log(`    - net: ${JSON.stringify(r.net || 'missing')}`);
+              console.log(`    - retailRate: ${JSON.stringify(r.retailRate || 'missing')}`);
+              console.log(`    - currency: ${r.currency || 'missing'}`);
+              console.log(`    - cancellation: ${!!r.cancellationPolicies}`);
+              console.log(`    - boardType: ${r.boardType || 'missing'}`);
+            }
+          });
+          console.log('--- INSPECTION END ---\n');
+        }
+        // --- OBSERVABILITY END ---
+
         if (ratesData.length > 0) {
           console.log(`Enriching ${ratesData.length} hotels with live rates`);
           const hotelsWithRates = ratesData.map((item: any) => {
