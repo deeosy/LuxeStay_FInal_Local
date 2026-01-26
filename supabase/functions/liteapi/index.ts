@@ -44,14 +44,10 @@ function setCache(key: string, data: any, ttl: number): void {
 
 // Normalize LiteAPI hotel data to match our frontend format
 function normalizeHotel(hotel: any, rates?: any) {
-  // 1. Dig deep into the rates structure
-  // Handle both 'rooms' (legacy/some endpoints) and 'roomTypes' (v3 standard)
+  // 1. Handle both 'rooms' (legacy) and 'roomTypes' (v3 standard)
   const availableRooms = rates?.roomTypes || rates?.rooms || [];
 
-  // 2. Identify the LOWEST PRICE from ALL rooms (White-Label Logic)
-  // Instead of just taking the first room, we scan all rooms to find the best deal.
-  // This ensures price is never 0 unless truly unavailable.
-  
+  // 2. Find the LOWEST nightly price from ALL rooms/rates
   let lowestPrice = Infinity;
   let bestBookingUrl = null;
   const normalizedRooms: any[] = [];
@@ -60,21 +56,20 @@ function normalizeHotel(hotel: any, rates?: any) {
     const roomRates = room.rates || [];
     
     roomRates.forEach((rate: any) => {
-      // Calculate nightly price
+      // Extract nightly price correctly
       let nightlyPrice = 0;
       if (rate.retailRate?.total?.amount) {
         nightlyPrice = Math.round(rate.retailRate.total.amount / (rates?.nights || 1));
-      } else if (rate.retailRate?.amount) {
-        nightlyPrice = Math.round(rate.retailRate.amount / (rates?.nights || 1));
       } else if (rate.retail?.total?.amount) {
-         // Some v3 endpoints use 'retail' instead of 'retailRate'
         nightlyPrice = Math.round(rate.retail.total.amount / (rates?.nights || 1));
+      } else if (rate.price?.amount) {
+        nightlyPrice = Math.round(rate.price.amount / (rates?.nights || 1));
       }
 
+      // Only consider valid prices
       if (nightlyPrice > 0 && nightlyPrice < lowestPrice) {
         lowestPrice = nightlyPrice;
         
-        // Update best booking URL based on the cheapest rate
         bestBookingUrl = 
           rate.booking_url || 
           rate.deeplink || 
@@ -83,7 +78,6 @@ function normalizeHotel(hotel: any, rates?: any) {
           null;
       }
 
-      // Add to normalized rooms list (for potential UI use)
       normalizedRooms.push({
         id: room.roomTypeId || room.roomId || room.id,
         name: room.name,
@@ -96,13 +90,12 @@ function normalizeHotel(hotel: any, rates?: any) {
     });
   });
 
-  // Fallback if no rates found
+  // 3. Fallback only if absolutely no rates found
   if (lowestPrice === Infinity) {
     lowestPrice = hotel.pricePerNight || 0;
   }
 
-  // 3. PRIORITY URL MAPPING (Crucial for live bookings)
-  // If we didn't find a specific rate URL, fall back to hotel-level URLs
+  // 4. Final booking URL priority
   const bookingUrl = 
     bestBookingUrl ||
     hotel.booking_url || 
@@ -117,8 +110,8 @@ function normalizeHotel(hotel: any, rates?: any) {
     location: [hotel.city, hotel.country].filter(Boolean).join(', ') || hotel.address || 'Unknown Location',
     city: hotel.city,
     country: hotel.country,
-    price: lowestPrice, // Now strictly the cheapest available rate
-    bookingUrl, 
+    price: lowestPrice, // Now correctly extracted
+    bookingUrl,
     rating: hotel.starRating || hotel.rating || 4.5,
     reviews: hotel.reviewsCount || Math.floor(Math.random() * 500) + 50,
     image: hotel.main_photo || hotel.mainPhoto || hotel.images?.[0]?.url || hotel.images?.[0] || '/placeholder.svg',
@@ -132,7 +125,7 @@ function normalizeHotel(hotel: any, rates?: any) {
     latitude: hotel.latitude,
     longitude: hotel.longitude,
     rawData: { hotel, rates },
-    rooms: normalizedRooms, // Expose full room list for white-label UI
+    rooms: normalizedRooms,
   };
 }
 
