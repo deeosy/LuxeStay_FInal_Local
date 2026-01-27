@@ -183,7 +183,8 @@ const HotelDetail = () => {
           impressionFired.current = true;
         }
 
-        // Record price (can fire multiple times - captures price changes)
+        // Record price (can fire multiple times - captures
+        //  price changes)
         if (hotel.price) {
           recordPrice(hotelIdForEvent, hotel.price);
         }
@@ -340,6 +341,18 @@ const HotelDetail = () => {
     const timer = setTimeout(() => setCanShowExit(true), 7000);
     return () => clearTimeout(timer);
   }, []);
+
+  // debugging purpose delete later / soon
+  useEffect(() => {
+  if (hotel?.roomTypes) {
+    console.log('=== ROOM TYPES DEBUG ===');
+    hotel.roomTypes.forEach((room, idx) => {
+      console.log(`Room ${idx}:`, room.name);
+      console.log(`  Images:`, room.images);
+      console.log(`  Amenities:`, room.amenities);
+    });
+  }
+}, [hotel]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -638,7 +651,15 @@ const HotelDetail = () => {
 
           {/* Main Image Gallery */}
           <HotelGallery 
-            images={hotel.images || [hotel.image]} 
+            images={(() => {
+              if (hotel.images && Array.isArray(hotel.images) && hotel.images.length > 0) {
+                return hotel.images;
+              }
+              if (hotel.image) {
+                return [hotel.image];
+              }
+              return ['/placeholder.svg'];
+            })()} 
             hotelName={hotel.name}
           />
 

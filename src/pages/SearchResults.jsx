@@ -111,43 +111,6 @@ const SearchResults = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, isInitialized]);
 
-  // const matchedCity = useMemo(() => {
-  //   if (!searchQuery) return null;
-  //   return cities.find(
-  //     c => c.cityName.toLowerCase() === searchQuery.toLowerCase()
-  //   );
-  // }, [searchQuery]);
-
-  // const fuzzyCityMatch = useMemo(() => {
-  //   if (!searchQuery) return null;
-  //   return cities.find(c =>
-  //     c.cityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-  //     searchQuery.toLowerCase().includes(c.cityName.toLowerCase())
-  //   );
-  // }, [searchQuery]);
-  // const resolvedCity = matchedCity || fuzzyCityMatch;
-
-  //   const liteSearchParams = useMemo(() => {
-  //   if (!isInitialized) return { enabled: false };
-
-
-  //   if (resolvedCity?.liteApiLocationId) {
-  //     return {
-  //       locationId: resolvedCity.liteApiLocationId,
-  //       checkIn,
-  //       checkOut,
-  //       guests,
-  //       enabled: true,
-  //     };
-  //   }
-
-
-
-  //   return {
-  //     enabled: false // wait until we resolve a city
-  //   };
-  // }, [matchedCity, searchQuery, checkIn, checkOut, guests, isInitialized]);
-
   // ✅ All hooks at top level — correct order preserved
 const matchedCity = useMemo(() => {
   if (!searchQuery) return null;

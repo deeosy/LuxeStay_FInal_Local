@@ -125,8 +125,31 @@ function normalizeHotel(hotel: any, rates?: any) {
     bookingUrl, 
     rating: hotel.starRating || hotel.rating || 4.5,
     reviews: hotel.reviewsCount || Math.floor(Math.random() * 500) + 50,
-    image: hotel.main_photo || hotel.mainPhoto || hotel.images?.[0]?.url || hotel.images?.[0] || '/placeholder.svg',
-    images: hotel.images || [hotel.main_photo || hotel.mainPhoto].filter(Boolean),
+    image: (() => {
+      // Priority order for main image
+      if (hotel.main_photo) return hotel.main_photo;
+      if (hotel.mainPhoto) return hotel.mainPhoto;
+      if (hotel.hotelImages?.[0]?.url) return hotel.hotelImages[0].url;
+      if (hotel.images?.[0]?.url) return hotel.images[0].url;
+      if (typeof hotel.images?.[0] === 'string') return hotel.images[0];
+      return '/placeholder.svg';
+    })(),
+    images: (() => {
+      // Extract all image URLs from hotelImages array
+      if (hotel.hotelImages && Array.isArray(hotel.hotelImages)) {
+        return hotel.hotelImages.map(img => img.urlHd || img.url).filter(Boolean);
+      }
+      // Fallback to images array if it exists
+      if (hotel.images && Array.isArray(hotel.images)) {
+        return hotel.images.map(img => {
+          if (typeof img === 'string') return img;
+          if (img?.url) return img.url;
+          return null;
+        }).filter(Boolean);
+      }
+      // Last resort fallback
+      return [hotel.main_photo || hotel.mainPhoto].filter(Boolean);
+    })(),
     description: hotel.description || `Experience exceptional hospitality at ${hotel.name || 'this hotel'}.`,
     amenities: hotel.facilities?.slice(0, 8) || hotel.amenities || ['Wifi', 'Restaurant', 'Concierge'],
     sqft: hotel.roomSize || Math.floor(Math.random() * 500) + 400,
@@ -137,7 +160,107 @@ function normalizeHotel(hotel: any, rates?: any) {
     longitude: hotel.longitude,
     rawData: { hotel, rates },
     rooms: normalizedRooms, // Expose full room list for white-label UI
-    roomTypes: availableRooms, // Preserve full roomTypes and their rates
+    roomTypes: (() => {
+    // Extract static room data with photos from rawData
+    const staticRooms = hotel.rooms || [];
+    const staticRoomMap = new Map();
+
+    staticRooms.forEach(room => {
+    const roomImages = room.photos && Array.isArray(room.photos)
+      ? room.photos.map(photo => photo.hd_url || photo.url).filter(Boolean)
+      : [];
+
+    const amenities = room.roomAmenities && Array.isArray(room.roomAmenities)
+      ? room.roomAmenities.map(a => a.name).filter(Boolean)
+      : [];
+
+    // Store by room ID
+    staticRoomMap.set(room.id, {
+      images: roomImages,
+      amenities: amenities,
+      description: room.description,
+      size: room.roomSizeSquare,
+      bedType: room.bedTypes?.[0]?.bedType,
+      roomName: room.roomName, // ✅ ADDED for name matching
+    });
+    });
+
+    // Helper: Find static room by name similarity (fuzzy matching)
+    const findStaticRoomByName = (rateName) => {
+    if (!rateName) return null;
+
+    const normalize = (str) => str.toLowerCase()
+      .replace(/[^a-z0-9]/g, '') // Remove special chars
+      .replace(/\s+/g, ''); // Remove spaces
+
+    const normalizedRateName = normalize(rateName);
+
+    // Try exact ID match first
+    for (const [id, data] of staticRoomMap.entries()) {
+      if (normalize(data.roomName) === normalizedRateName) {
+        return { id, ...data };
+      }
+    }
+
+    // Try partial match (contains)
+    for (const [id, data] of staticRoomMap.entries()) {
+      const normalizedStaticName = normalize(data.roomName);
+      if (normalizedStaticName.includes(normalizedRateName) || 
+          normalizedRateName.includes(normalizedStaticName)) {
+        return { id, ...data };
+      }
+    }
+
+    return null;
+    };
+
+    // If we have live rates, merge with static room data
+    if (availableRooms && availableRooms.length > 0) {
+    return availableRooms.map(room => {
+      // Try multiple matching strategies
+      let staticData = staticRoomMap.get(room.roomTypeId || room.id);
+      
+      // If no match by ID, try matching by name
+      if (!staticData && room.name) {
+        const match = findStaticRoomByName(room.name);
+        if (match) {
+          staticData = match;
+        }
+      }
+      
+    // Fallback to empty object if no match found
+    staticData = staticData || {};
+      
+      return {
+        ...room,
+        images: staticData.images || [],
+        amenities: staticData.amenities || room.amenities || [],
+        description: staticData.description || room.description || '',
+        maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
+        size: staticData.size || room.roomSizeSquare || null,
+        bedType: staticData.bedType || room.bedTypes?.[0]?.bedType || null,
+      };
+    });
+    }
+
+    // Fallback: Return static rooms with empty rates (when no dates selected)
+    return staticRooms.map(room => {
+    const staticData = staticRoomMap.get(room.id) || {};
+
+    return {
+      id: room.id,
+      roomTypeId: room.id,
+      name: room.roomName,
+      description: staticData.description || '',
+      images: staticData.images || [],
+      amenities: staticData.amenities || [],
+      maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
+      size: staticData.size || null,
+      bedType: staticData.bedType || null,
+      rates: [],
+    };
+    });
+    })(),
     priceSource: hasLiveRates ? "liteapi-live" : "static",
   };
 }
@@ -447,42 +570,99 @@ serve(async (req) => {
       }
 
       // If dates are provided, enrich with live rates
+
+      // if (checkIn && checkOut) {
+      //   const hotelIds = hotelData.map(h => h.id || h.hotelId).filter(Boolean).slice(0, 10);
+      //   const ratesData = await getHotelRates(apiKey, hotelIds, checkIn, checkOut, guests, rooms);
+
+      //   // --- OBSERVABILITY START ---
+      //   if (ratesData.length > 0) {
+      //     console.log('\n--- LITEAPI PRICING INSPECTION ---');
+      //     const sample = ratesData[0];
+      //     console.log(`Hotel ID: ${sample.hotelId}`);
+      //     console.log(`Has 'rooms' array? ${!!sample.rooms} (Length: ${sample.rooms?.length || 0})`);
+      //     console.log(`Has 'roomTypes' array? ${!!sample.roomTypes} (Length: ${sample.roomTypes?.length || 0})`);
+          
+      //     const roomSource = sample.roomTypes || sample.rooms || [];
+      //     roomSource.slice(0, 3).forEach((room: any, idx: number) => {
+      //       console.log(`\n[Room #${idx + 1}] ID: ${room.roomTypeId || room.roomId || 'N/A'}`);
+      //       console.log(`  Name: ${room.name || 'N/A'}`);
+      //       console.log(`  Rates count: ${room.rates?.length || 0}`);
+            
+      //       if (room.rates?.length > 0) {
+      //         const r = room.rates[0];
+      //         console.log(`  Rate #1 fields:`);
+      //         console.log(`    - net: ${JSON.stringify(r.net || 'missing')}`);
+      //         console.log(`    - retailRate: ${JSON.stringify(r.retailRate || 'missing')}`);
+      //         console.log(`    - currency: ${r.currency || 'missing'}`);
+      //         console.log(`    - cancellation: ${!!r.cancellationPolicies}`);
+      //         console.log(`    - boardType: ${r.boardType || 'missing'}`);
+      //       }
+      //     });
+      //     console.log('--- INSPECTION END ---\n');
+      //   }
+      //   // --- OBSERVABILITY END ---
+
+      //   if (ratesData.length > 0) {
+      //     console.log(`Enriching ${ratesData.length} hotels with live rates`);
+      //     const hotelsWithRates = ratesData.map((item: any) => {
+      //       const baseHotel = hotelData.find(h => (h.id || h.hotelId) === item.hotelId) || item.hotelData || item;
+      //       return normalizeHotel(baseHotel, item);
+      //     });
+
+      //     return new Response(
+      //       JSON.stringify({ 
+      //         hotels: hotelsWithRates, 
+      //         source: 'liteapi-live' 
+      //       }),
+      //       { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+      //     );
+      //   } else {
+      //     console.log('Live rates fetch returned no data, falling back to static');
+      //   }
+      // }
+
       if (checkIn && checkOut) {
         const hotelIds = hotelData.map(h => h.id || h.hotelId).filter(Boolean).slice(0, 10);
+
+        // ✅ ADDED: Fetch full hotel details with room photos
+        const fullHotelDataPromises = hotelIds.map(async (hotelId) => {
+          try {
+            const detailUrl = `${LITEAPI_BASE_URL}/data/hotel?hotelId=${encodeURIComponent(hotelId)}`;
+            const response = await fetch(detailUrl, {
+              method: 'GET',
+              headers: { 'X-API-Key': apiKey },
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              return data.data || data;
+            }
+            return null;
+          } catch (error) {
+            console.error(`Error fetching details for hotel ${hotelId}:`, error);
+            return null;
+          }
+        });
+
+        const fullHotelDataArray = await Promise.all(fullHotelDataPromises);
+        const fullHotelDataMap = new Map();
+        fullHotelDataArray.forEach(hotel => {
+          if (hotel?.id) {
+            fullHotelDataMap.set(hotel.id, hotel);
+          }
+        });
+
+        // Get live rates
         const ratesData = await getHotelRates(apiKey, hotelIds, checkIn, checkOut, guests, rooms);
 
-        // --- OBSERVABILITY START ---
         if (ratesData.length > 0) {
-          console.log('\n--- LITEAPI PRICING INSPECTION ---');
-          const sample = ratesData[0];
-          console.log(`Hotel ID: ${sample.hotelId}`);
-          console.log(`Has 'rooms' array? ${!!sample.rooms} (Length: ${sample.rooms?.length || 0})`);
-          console.log(`Has 'roomTypes' array? ${!!sample.roomTypes} (Length: ${sample.roomTypes?.length || 0})`);
-          
-          const roomSource = sample.roomTypes || sample.rooms || [];
-          roomSource.slice(0, 3).forEach((room: any, idx: number) => {
-            console.log(`\n[Room #${idx + 1}] ID: ${room.roomTypeId || room.roomId || 'N/A'}`);
-            console.log(`  Name: ${room.name || 'N/A'}`);
-            console.log(`  Rates count: ${room.rates?.length || 0}`);
-            
-            if (room.rates?.length > 0) {
-              const r = room.rates[0];
-              console.log(`  Rate #1 fields:`);
-              console.log(`    - net: ${JSON.stringify(r.net || 'missing')}`);
-              console.log(`    - retailRate: ${JSON.stringify(r.retailRate || 'missing')}`);
-              console.log(`    - currency: ${r.currency || 'missing'}`);
-              console.log(`    - cancellation: ${!!r.cancellationPolicies}`);
-              console.log(`    - boardType: ${r.boardType || 'missing'}`);
-            }
-          });
-          console.log('--- INSPECTION END ---\n');
-        }
-        // --- OBSERVABILITY END ---
-
-        if (ratesData.length > 0) {
-          console.log(`Enriching ${ratesData.length} hotels with live rates`);
+          console.log(`Enriching ${ratesData.length} hotels with live rates AND full details`);
           const hotelsWithRates = ratesData.map((item: any) => {
-            const baseHotel = hotelData.find(h => (h.id || h.hotelId) === item.hotelId) || item.hotelData || item;
+            // ✅ CHANGED: Use full hotel data (with rooms/photos) instead of basic list data
+            const fullHotel = fullHotelDataMap.get(item.hotelId);
+            const baseHotel = fullHotel || hotelData.find(h => (h.id || h.hotelId) === item.hotelId) || item.hotelData || item;
+            
             return normalizeHotel(baseHotel, item);
           });
 
