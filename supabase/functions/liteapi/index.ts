@@ -44,58 +44,68 @@ function setCache(key: string, data: any, ttl: number): void {
 
 // Normalize LiteAPI hotel data to match our frontend format
 function normalizeHotel(hotel: any, rates?: any) {
-  // 1. Handle both 'rooms' (legacy) and 'roomTypes' (v3 standard)
-  const availableRooms = rates?.roomTypes || rates?.rooms || [];
+  // 1. Dig deep into the rates structure
+  // User Update: Stop relying on 'rooms', use 'roomTypes'
+  const availableRooms = rates?.roomTypes || [];
+  const hasLiveRates = availableRooms.length > 0;
 
-  // 2. Find the LOWEST nightly price from ALL rooms/rates
+  // 2. Identify the LOWEST PRICE from ALL roomTypes
   let lowestPrice = Infinity;
   let bestBookingUrl = null;
   const normalizedRooms: any[] = [];
 
   availableRooms.forEach((room: any) => {
-    const roomRates = room.rates || [];
-    
-    roomRates.forEach((rate: any) => {
-      // Extract nightly price correctly
-      let nightlyPrice = 0;
-      if (rate.retailRate?.total?.amount) {
-        nightlyPrice = Math.round(rate.retailRate.total.amount / (rates?.nights || 1));
-      } else if (rate.retail?.total?.amount) {
-        nightlyPrice = Math.round(rate.retail.total.amount / (rates?.nights || 1));
-      } else if (rate.price?.amount) {
-        nightlyPrice = Math.round(rate.price.amount / (rates?.nights || 1));
-      }
+    let priceAmount = 0;
+    let currency = 'USD';
+    let currentBookingUrl = null;
 
-      // Only consider valid prices
-      if (nightlyPrice > 0 && nightlyPrice < lowestPrice) {
-        lowestPrice = nightlyPrice;
-        
-        bestBookingUrl = 
-          rate.booking_url || 
-          rate.deeplink || 
-          rate.paymentUrl || 
-          rate.bookingUrl ||
-          null;
+    // Extract price from offerRetailRate or fallback to rates array
+    if (room.offerRetailRate?.amount) {
+      priceAmount = room.offerRetailRate.amount;
+      currency = room.offerRetailRate.currency || 'USD';
+    } else if (room.rates && room.rates.length > 0) {
+      const firstRate = room.rates[0];
+      if (firstRate.retailRate?.total?.amount) {
+        priceAmount = firstRate.retailRate.total.amount;
+        currency = firstRate.retailRate.total.currency || 'USD';
+      } else if (firstRate.retailRate?.amount) {
+        priceAmount = firstRate.retailRate.amount;
+        currency = firstRate.retailRate.currency || 'USD';
       }
+      
+      currentBookingUrl = firstRate.booking_url || firstRate.deeplink || firstRate.paymentUrl || firstRate.bookingUrl;
+    }
 
-      normalizedRooms.push({
-        id: room.roomTypeId || room.roomId || room.id,
-        name: room.name,
-        price: nightlyPrice,
-        currency: rate.currency || 'USD',
-        cancellation: !!rate.cancellationPolicies,
-        board: rate.boardType || 'Room Only',
-        bookingUrl: rate.booking_url || rate.deeplink || rate.paymentUrl || rate.bookingUrl
-      });
+    // Calculate nightly price (LiteAPI usually returns total for stay)
+    const nights = rates?.nights || 1;
+    const nightlyPrice = priceAmount > 0 ? priceAmount / nights : 0;
+
+    if (nightlyPrice > 0 && nightlyPrice < lowestPrice) {
+      lowestPrice = nightlyPrice;
+      if (currentBookingUrl) {
+        bestBookingUrl = currentBookingUrl;
+      }
+    }
+
+    // Add to normalized rooms list
+    normalizedRooms.push({
+      id: room.roomTypeId || room.roomId || room.id,
+      name: room.name,
+      price: nightlyPrice,
+      currency: currency,
+      cancellation: !!room.rates?.[0]?.cancellationPolicies,
+      board: room.rates?.[0]?.boardType || 'Room Only',
+      bookingUrl: currentBookingUrl
     });
   });
 
-  // 3. Fallback only if absolutely no rates found
+  // Fallback if no rates found
   if (lowestPrice === Infinity) {
     lowestPrice = hotel.pricePerNight || 0;
   }
 
-  // 4. Final booking URL priority
+  // 3. PRIORITY URL MAPPING (Crucial for live bookings)
+  // If we didn't find a specific rate URL, fall back to hotel-level URLs
   const bookingUrl = 
     bestBookingUrl ||
     hotel.booking_url || 
@@ -110,8 +120,9 @@ function normalizeHotel(hotel: any, rates?: any) {
     location: [hotel.city, hotel.country].filter(Boolean).join(', ') || hotel.address || 'Unknown Location',
     city: hotel.city,
     country: hotel.country,
-    price: lowestPrice, // Now correctly extracted
-    bookingUrl,
+    price: lowestPrice, // Now strictly the cheapest available rate
+    currency: "USD",
+    bookingUrl, 
     rating: hotel.starRating || hotel.rating || 4.5,
     reviews: hotel.reviewsCount || Math.floor(Math.random() * 500) + 50,
     image: hotel.main_photo || hotel.mainPhoto || hotel.images?.[0]?.url || hotel.images?.[0] || '/placeholder.svg',
@@ -125,7 +136,9 @@ function normalizeHotel(hotel: any, rates?: any) {
     latitude: hotel.latitude,
     longitude: hotel.longitude,
     rawData: { hotel, rates },
-    rooms: normalizedRooms,
+    rooms: normalizedRooms, // Expose full room list for white-label UI
+    roomTypes: availableRooms, // Preserve full roomTypes and their rates
+    priceSource: hasLiveRates ? "liteapi-live" : "static",
   };
 }
 

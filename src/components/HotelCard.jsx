@@ -4,7 +4,6 @@ import { Star, MapPin, Users, Maximize, Heart, Check, ShieldCheck, Zap, Flame, D
 import useFavoritesStore from '@/stores/useFavoritesStore';
 import { trackAffiliateRedirect } from '@/utils/analytics';
 import { useRevenueEngine } from '@/hooks/useRevenueEngine';
-import PriceAnchor from '@/components/PriceAnchor'; 
 import ScarcityBadge from '@/components/ScarcityBadge';
 import UrgencyNote from '@/components/UrgencyNote';
 import TrustSignal from '@/components/TrustSignal';
@@ -12,26 +11,10 @@ import BookingCTA from '@/components/BookingCTA';
 import { trackAffiliateEvent } from '@/utils/affiliateEvents';
 import useAuthStore from '@/stores/useAuthStore';
 import { useSavedHotelIds } from '@/hooks/useSavedHotelIds';
+import { getBookingLabel, getPriceMicrocopy } from '@/utils/bookingCopy';
 
-const getBookingLabel = (rating, isBudget, price) => {
-  if (!price) return 'Check Availability';
-  if (isBudget) return 'View Cheapest Option';
-  if (rating >= 4.5) return 'View Best Rated Deal';
-  return 'View Best Deal';
-};
 
-const getPriceMicrocopy = (price, average, city, isBudget, favorited) => {
-  if (favorited) return 'Still interested?';
-  if (!price || !average) return null;
-  if (isBudget) return 'One of the better-priced hotels in this area';
-  if (price < average) {
-    if (city) return `Great value for stays in ${city}`;
-    return 'Great value compared with similar stays';
-  }
-  return 'Priced similarly to other stays in this area';
-};
-
-const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold }) => {
+const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold, checkIn: propCheckIn, checkOut: propCheckOut, guests: propGuests }) => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -47,7 +30,10 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
   const favorited = isHotelSaved(hotelId);
 
   const { getBadges } = useRevenueEngine();
-  const revenueBadges = getBadges(hotelId);
+  const hasPrice = hotel.price && hotel.price > 0;
+  
+  // Only calculate badges if we have a price
+  const revenueBadges = hasPrice ? getBadges(hotelId) : [];
   const isTopConverting = revenueBadges.some(b => b.type === 'top_converting');
   const isTryInstead = revenueBadges.some(b => b.type === 'try_instead');
 
@@ -58,14 +44,14 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
 
   // Construct Affiliate Link with Tracking Params
   const currentPath = location.pathname + location.search;
-  const checkIn = searchParams.get('checkIn');
-  const checkOut = searchParams.get('checkOut');
-  const guests = searchParams.get('guests');
+  const checkIn = propCheckIn || searchParams.get('checkIn');
+  const checkOut = propCheckOut || searchParams.get('checkOut');
+  const guests = propGuests || searchParams.get('guests');
 
   const affiliateParams = new URLSearchParams({
       city: seoCity || hotel.city || 'unknown',
       hotel: hotel.name || 'hotel',
-      price: hotel.price ? hotel.price.toString() : '0',
+      price: hasPrice ? hotel.price.toString() : '0',
       page: currentPath,
       checkIn: checkIn || '',
       checkOut: checkOut || '',
@@ -75,8 +61,8 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
   const affiliateLink = `/go/hotel/${hotelId}?${affiliateParams}`;
 
   const isHighDemand = (hotel.rating || 0) >= 4.6;
-  const isBestValue = cityAverage && hotel.price && hotel.price < cityAverage;
-  const isLimitedRooms = cityAverage && hotel.price && hotel.price < (cityAverage * 0.8);
+  const isBestValue = hasPrice && cityAverage && hotel.price < cityAverage;
+  const isLimitedRooms = hasPrice && cityAverage && hotel.price < (cityAverage * 0.8);
 
   const pathSegments = location.pathname.split('/').filter(Boolean);
   let citySlugFromPath = null;
@@ -91,6 +77,8 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
   const filterSlugForEvent = filterSlugFromPath || null;
 
   useEffect(() => {
+    if (impressionFired.current) return;
+    
     trackAffiliateEvent({
       eventType: 'hotel_impression',
       hotelId,
@@ -239,9 +227,13 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
                 }`}
               />
             </button>
-            <div className="price-tag">
-              ${hotel.price}<span className="text-xs font-normal">/night</span>
-            </div>
+            {hotel.price && hotel.price > 0 && (
+              <div className="price-tag flex items-baseline gap-1">
+                <span className="text-xs font-normal opacity-90">From</span>
+                ${Math.floor(hotel.price).toLocaleString()}
+                <span className="text-xs font-normal">/night</span>
+              </div>
+            )}
           </div>
         </div>
       </Link>
@@ -313,7 +305,15 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
               }`}
             />
           </button>
-          <PriceAnchor price={hotel.price} size="sm" />
+          {hotel.price && hotel.price > 0 && (
+            <div className="flex items-baseline gap-1 bg-card/90 px-3 py-1.5 rounded-lg shadow-sm backdrop-blur-sm z-10">
+              <span className="text-xs text-muted-foreground font-normal">From</span>
+              <span className="font-display text-lg font-bold text-foreground">
+                ${Math.ceil(hotel.price).toLocaleString()}
+              </span>
+              <span className="text-xs text-muted-foreground font-normal">/night</span>
+            </div>
+          )}
         </div>
       </Link>
       
@@ -382,7 +382,7 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold })
               {priceMicrocopy}
             </p>
           )}
-          <UrgencyNote hasFreeCancellation={Boolean(hotel.freeCancellation)} />
+          {hasPrice && <UrgencyNote hasFreeCancellation={Boolean(hotel.freeCancellation)} />}
         </div>
       </div>
     </div>

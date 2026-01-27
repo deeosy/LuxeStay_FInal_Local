@@ -44,6 +44,11 @@ import TrustSignal from '@/components/TrustSignal';
 import ExitIntentModal from '@/components/ExitIntentModal';
 import BookingCTA from '@/components/BookingCTA';
 import CompareAlternatives from '@/components/CompareAlternatives';
+import RoomTypeList from '@/components/RoomTypeList';
+import Reviews from '@/components/Reviews';
+import HotelGallery from '@/components/HotelGallery';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getBookingLabel, getPriceMicrocopy } from '@/utils/bookingCopy';
 
 const facilityIcons = {
   Spa: Waves,
@@ -68,25 +73,6 @@ const findStaticHotel = (id) => {
   const numericId = Number(id);
   if (!numericId) return null;
   return allHotels.find((h) => h.id === numericId) || null;
-};
-
-
-
-const getBookingLabel = (rating, isBudget, price) => {
-  if (!price) return 'Check Availability';
-  if (isBudget) return 'View Cheapest Option';
-  if (rating >= 4.5) return 'View Best Rated Deal';
-  return 'View Best Deal';
-};
-
-const getPriceMicrocopy = (price, average, city, isBudget) => {
-  if (!price || !average) return null;
-  if (isBudget) return 'One of the better-priced hotels in this area';
-  if (price < average) {
-    if (city) return `Great value for stays in ${city}`;
-    return 'Great value compared with similar stays';
-  }
-  return 'Priced similarly to other stays in this area';
 };
 
 
@@ -172,8 +158,9 @@ const HotelDetail = () => {
   };
 
   useEffect(() => {
-    if (hotel) {
+    if (!hotel) return;
       setSelectedHotel(hotel);
+      // Track view event (can fire multiple times - captures behavior)
       trackHotelView({
         hotel_id: hotel.liteApiId || hotel.id,
         name: hotel.name,
@@ -184,22 +171,24 @@ const HotelDetail = () => {
       const hotelIdForEvent = hotel.liteApiId || hotel.id;
 
       if (hotelIdForEvent) {
-        trackAffiliateEvent({
-          eventType: 'hotel_impression',
-          hotelId: hotelIdForEvent,
-          citySlug: citySlugFromParams || hotel.citySlug || null,
-          filterSlug: null,
-          pageUrl: `${location.pathname}${location.search}`,
-        });
-        impressionFired.current = true;
+        // Guard: Only fire impression once
+        if (!impressionFired.current) {
+          trackAffiliateEvent({
+            eventType: 'hotel_impression',
+            hotelId: hotelIdForEvent,
+            citySlug: citySlugFromParams || hotel.citySlug || null,
+            filterSlug: null,
+            pageUrl: `${location.pathname}${location.search}`,
+          });
+          impressionFired.current = true;
+        }
 
-        // Step 83: Record price for history
+        // Record price (can fire multiple times - captures price changes)
         if (hotel.price) {
           recordPrice(hotelIdForEvent, hotel.price);
         }
       }
-    }
-  }, [hotel, setSelectedHotel, citySlugFromParams, location, recordPrice]);
+    }, [hotel, setSelectedHotel, citySlugFromParams, location, recordPrice]);
 
   // Determine city for similar hotels
   const cityForSearch = hotel?.city || hotel?.citySlug || (hotel?.location ? hotel.location.split(',')[0] : '');
@@ -208,6 +197,47 @@ const HotelDetail = () => {
   const searchDestination = knownCity ? knownCity.query : cityForSearch;
   
   const cityName = knownCity ? knownCity.cityName : (hotel?.city || 'City');
+
+  // Room Rate Selection State
+  const [selectedRateId, setSelectedRateId] = useState(null);
+  const [selectedPrice, setSelectedPrice] = useState(null);
+
+  // Initialize with cheapest rate when hotel loads
+  useEffect(() => {
+    if (hotel?.roomTypes?.length > 0) {
+      let minPrice = Infinity;
+      let minRateId = null;
+
+      hotel.roomTypes.forEach((room, rIndex) => {
+        if (room.rates) {
+          room.rates.forEach((rate, rateIndex) => {
+             const price = rate.retailRate?.total?.[0]?.amount;
+             if (price && price < minPrice) {
+               minPrice = price;
+               minRateId = rate.id || `${rIndex}-${rateIndex}`;
+             }
+          });
+        }
+      });
+
+      if (minPrice !== Infinity) {
+        setSelectedPrice(minPrice);
+        setSelectedRateId(minRateId);
+      } else {
+         // Fallback to hotel.price if no specific rates found
+         setSelectedPrice(hotel.price);
+      }
+    } else if (hotel?.price) {
+        setSelectedPrice(hotel.price);
+    }
+  }, [hotel]);
+
+  // Handle manual rate selection
+  const handleRateSelect = (rateId, price) => {
+    setSelectedRateId(rateId);
+    setSelectedPrice(price);
+  };
+
 
   // ✅ Corrected Logic: Prioritize LiteAPI ID, fallback to destination string
   const similarSearchParams = useMemo(() => {
@@ -470,7 +500,9 @@ const HotelDetail = () => {
 
   // Calculate nights from global store dates
   const nights = getNights();
-  const subtotal = hotel.price * nights;
+  // Use selectedPrice if available, fallback to hotel.price, ensure never 0
+  const effectivePrice = selectedPrice || hotel.price || 0;
+  const subtotal = effectivePrice * nights;
   const serviceFee = Math.round(subtotal * 0.1);
   const total = subtotal + serviceFee;
 
@@ -604,17 +636,11 @@ const HotelDetail = () => {
             </div>
           </div>
 
-          {/* Main Image */}
-          <div className="relative aspect-[21/9] rounded-xl overflow-hidden mb-8">
-            <img
-              src={hotel.image}
-              alt={hotel.name}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-4 right-4">
-              <PriceAnchor price={hotel.price} size="lg" />
-            </div>
-          </div>
+          {/* Main Image Gallery */}
+          <HotelGallery 
+            images={hotel.images || [hotel.image]} 
+            hotelName={hotel.name}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Main Content */}
@@ -644,109 +670,147 @@ const HotelDetail = () => {
                 </div>
               </div>
 
-              {/* Price Psychology Badges */}
-              {cityAverage && (
-                <div className="mb-8 flex flex-wrap items-center gap-3">
-                   {isTopConverting && (
-                     <div className="inline-flex items-center gap-1.5 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full text-sm font-medium animate-pulse">
-                       <TrendingUp className="w-4 h-4" /> Top Converting Hotel
-                     </div>
-                   )}
-                   {isGreatDeal && (
-                     <div className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium">
-                       <Check className="w-4 h-4" /> Great Deal
-                     </div>
-                   )}
-                   {isPremium && (
-                     <div className="inline-flex items-center gap-1.5 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full text-sm font-medium">
-                       <Star className="w-4 h-4" /> Premium Stay
-                     </div>
-                   )}
-                   <span className="text-sm text-muted-foreground">
-                     {priceDiffPercent < 0 
-                        ? `This hotel is ${Math.abs(priceDiffPercent)}% cheaper than similar hotels in ${cityName}`
-                        : `This hotel is ${priceDiffPercent}% more expensive than similar hotels in ${cityName}`
-                     }
-                   </span>
-                </div>
-              )}
+              <Tabs defaultValue="overview" className="w-full">
+                <TabsList className="mb-8 w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+                  <TabsTrigger 
+                    value="overview"
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium text-muted-foreground data-[state=active]:text-foreground shadow-none"
+                  >
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="rooms"
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium text-muted-foreground data-[state=active]:text-foreground shadow-none"
+                  >
+                    Rooms
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="reviews"
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium text-muted-foreground data-[state=active]:text-foreground shadow-none"
+                  >
+                    Reviews
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* Quick Info */}
-              <div className="flex flex-wrap gap-6 pb-8 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                    <Maximize className="w-5 h-5 text-accent" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{hotel.sqft} sq ft</p>
-                    <p className="text-xs text-muted-foreground">Room Size</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                    <Users className="w-5 h-5 text-accent" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{hotel.guests} Guests</p>
-                    <p className="text-xs text-muted-foreground">Max Capacity</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                    <span className="text-accent font-medium">{hotel.beds}</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{hotel.beds} Bed{hotel.beds > 1 ? 's' : ''}</p>
-                    <p className="text-xs text-muted-foreground">Bedrooms</p>
-                  </div>
-                </div>
-              </div>
+                <TabsContent value="overview" className="animate-in fade-in duration-500">
+                  {/* Price Psychology Badges */}
+                  {cityAverage && (
+                    <div className="mb-8 flex flex-wrap items-center gap-3">
+                      {isTopConverting && (
+                        <div className="inline-flex items-center gap-1.5 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full text-sm font-medium animate-pulse">
+                          <TrendingUp className="w-4 h-4" /> Top Converting Hotel
+                        </div>
+                      )}
+                      {isGreatDeal && (
+                        <div className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium">
+                          <Check className="w-4 h-4" /> Great Deal
+                        </div>
+                      )}
+                      {isPremium && (
+                        <div className="inline-flex items-center gap-1.5 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full text-sm font-medium">
+                          <Star className="w-4 h-4" /> Premium Stay
+                        </div>
+                      )}
+                      <span className="text-sm text-muted-foreground">
+                        {priceDiffPercent < 0 
+                            ? `This hotel is ${Math.abs(priceDiffPercent)}% cheaper than similar hotels in ${cityName}`
+                            : `This hotel is ${priceDiffPercent}% more expensive than similar hotels in ${cityName}`
+                        }
+                      </span>
+                    </div>
+                  )}
 
-              {/* Description */}
-              <div className="py-8 border-b border-border">
-                <h2 className="font-display text-xl font-medium mb-4">
-                  About This Property
-                </h2>
-                <p className="text-muted-foreground leading-relaxed">
-                  {hotel.description}
-                </p>
-                <p className="text-muted-foreground leading-relaxed mt-4">
-                  Experience unparalleled luxury at {hotel.name}. This exquisite property
-                  offers a perfect blend of comfort, elegance, and world-class service.
-                  Whether you're seeking a romantic getaway, a family vacation, or a
-                  business retreat, our dedicated staff ensures every moment of your stay
-                  is nothing short of extraordinary.
-                </p>
-              </div>
-
-              {/* Facilities */}
-              <div className="py-8">
-                <h2 className="font-display text-xl font-medium mb-6">
-                  Amenities & Services
-                </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {hotel.amenities.map((facility, index) => {
-                    const name = typeof facility === "string" ? facility : facility.name;
-                    const Icon = facilityIcons[name] || Check;
-
-                    return (
-                      <div
-                        key={`${name}-${index}`}
-                        className="flex items-center gap-3 p-4 rounded-lg bg-secondary/50"
-                      >
-                        <Icon className="w-5 h-5 text-accent" />
-                        <span className="text-sm font-medium">{name}</span>
+                  {/* Quick Info */}
+                  <div className="flex flex-wrap gap-6 pb-8 border-b border-border">
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                        <Maximize className="w-5 h-5 text-accent" />
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      <div>
+                        <p className="text-sm font-medium">{hotel.sqft} sq ft</p>
+                        <p className="text-xs text-muted-foreground">Room Size</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                        <Users className="w-5 h-5 text-accent" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{hotel.guests} Guests</p>
+                        <p className="text-xs text-muted-foreground">Max Capacity</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                        <span className="text-accent font-medium">{hotel.beds}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{hotel.beds} Bed{hotel.beds > 1 ? 's' : ''}</p>
+                        <p className="text-xs text-muted-foreground">Bedrooms</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  <div className="py-8 border-b border-border">
+                    <h2 className="font-display text-xl font-medium mb-4">
+                      About This Property
+                    </h2>
+                    <p className="text-muted-foreground leading-relaxed">
+                      {hotel.description}
+                    </p>
+                    <p className="text-muted-foreground leading-relaxed mt-4">
+                      Experience unparalleled luxury at {hotel.name}. This exquisite property
+                      offers a perfect blend of comfort, elegance, and world-class service.
+                      Whether you're seeking a romantic getaway, a family vacation, or a
+                      business retreat, our dedicated staff ensures every moment of your stay
+                      is nothing short of extraordinary.
+                    </p>
+                  </div>
+
+                  {/* Facilities */}
+                  <div className="py-8">
+                    <h2 className="font-display text-xl font-medium mb-6">
+                      Amenities & Services
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {hotel.amenities.map((facility, index) => {
+                        const name = typeof facility === "string" ? facility : facility.name;
+                        const Icon = facilityIcons[name] || Check;
+
+                        return (
+                          <div
+                            key={`${name}-${index}`}
+                            className="flex items-center gap-3 p-4 rounded-lg bg-secondary/50"
+                          >
+                            <Icon className="w-5 h-5 text-accent" />
+                            <span className="text-sm font-medium">{name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="rooms" className="animate-in fade-in duration-500">
+                  <RoomTypeList 
+                    roomTypes={hotel.roomTypes} 
+                    hotelImages={hotel.images || [hotel.image]}
+                    selectedRateId={selectedRateId}
+                    onSelectRate={handleRateSelect}
+                  />
+                </TabsContent>
+
+                <TabsContent value="reviews" className="animate-in fade-in duration-500">
+                  <Reviews rating={hotel.rating} reviewCount={hotel.reviews || 124} />
+                </TabsContent>
+              </Tabs>
             </div>
 
             {/* Booking Card */}
             <div className="lg:col-span-1">
               <div className="sticky top-28 bg-card border border-border rounded-xl p-6 shadow-luxury-md">
-                <PriceAnchor price={hotel.price} size="lg" className="mb-2" />
+                <PriceAnchor price={effectivePrice} size="lg" className="mb-2" />
                 <ScarcityBadge hotel={hotel} className="mt-1" />
 
                 <div className="space-y-4 mb-6">
@@ -874,19 +938,19 @@ const HotelDetail = () => {
                 <div className="space-y-3 py-4 border-t border-b border-border mb-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">
-                      ${hotel.price} x {nights} night{nights > 1 ? 's' : ''}
+                      ${Math.ceil(effectivePrice).toLocaleString()} x {nights} night{nights > 1 ? 's' : ''}
                     </span>
-                    <span>${subtotal}</span>
+                    <span>${Math.ceil(subtotal).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Service fee</span>
-                    <span>${serviceFee}</span>
+                    <span>${Math.ceil(serviceFee).toLocaleString()}</span>
                   </div>
                 </div>
 
                 <div className="flex justify-between font-medium mb-6">
                   <span>Total</span>
-                  <span className="text-lg">${total}</span>
+                  <span className="text-lg">${Math.ceil(total).toLocaleString()}</span>
                 </div>
 
                 <BookingCTA
@@ -922,6 +986,9 @@ const HotelDetail = () => {
                     hotel={similarHotel}
                     cityAverage={cityAverage}
                     budgetThreshold={budgetThreshold}
+                    checkIn={checkIn}
+                    checkOut={checkOut}
+                    guests={guests}
                   />
                 ))}
               </div>
