@@ -10,7 +10,22 @@ const calculateNights = (checkIn, checkOut) => {
 };
 
 // Utility to calculate price breakdown
-const calculatePriceBreakdown = (hotel, nights) => {
+const calculatePriceBreakdown = (hotel, nights, bookingSummary = null) => {
+  // Prefer real locked price from booking summary / prebook
+  if (bookingSummary?.pricing?.total) {
+    const total = bookingSummary.pricing.total;
+    const subtotal = total; // or break it down if LiteAPI gives components
+    const serviceFee = Math.round(subtotal * 0.1);
+    return {
+      pricePerNight: total / nights,
+      nights,
+      subtotal,
+      serviceFee,
+      total: subtotal + serviceFee,
+    };
+  }
+
+  // Fallback to hotel preview price
   if (!hotel) return null;
   const subtotal = hotel.price * nights;
   const serviceFee = Math.round(subtotal * 0.1);
@@ -35,13 +50,46 @@ const useBookingStore = create((set, get) => ({
   // ===== SELECTED HOTEL & ROOM =====
   selectedHotel: null,
   selectedRoom: null,
+  selectedOffer: null, // Shape: { offerId, hotelId, roomName, price, ... }
+
+  // EXPECTED ROOM PRICE FR0M AUTO-SELECTION
+  expectedCheapestPrice: null,           // ← add this
+
+  setExpectedCheapestPrice: (price) =>   // ← add this
+    set({ expectedCheapestPrice: price }),
+
+  // Optional: clear it when needed
+  clearExpectedCheapestPrice: () =>
+    set({ expectedCheapestPrice: null }),
 
   // ===== DERIVED: PRICE BREAKDOWN =====
-  // Computed on-the-fly based on selectedHotel and dates
   getPriceBreakdown: () => {
     const state = get();
     const nights = calculateNights(state.checkIn, state.checkOut);
-    return calculatePriceBreakdown(state.selectedHotel, nights);
+    
+    // Prefer selectedOffer price if available
+    if (state.selectedOffer?.price?.amount) {
+      const total = state.selectedOffer.price.amount;
+      // If the offer price is total for the stay, use it directly.
+      // LiteAPI usually returns total price in retailRate.total
+      // If it's per night, we multiply.
+      // We'll assume the stored price is the TOTAL for the stay as per LiteAPI typical response for "retailRate.total"
+      // But we need to be careful. Let's assume the component calculates the correct total before storing.
+      
+      return {
+        pricePerNight: total / nights,
+        nights,
+        subtotal: total,
+        serviceFee: 0, // usually included in total or 0
+        total: total,
+      };
+    }
+
+    return calculatePriceBreakdown(
+      state.selectedHotel, 
+      nights, 
+      state.bookingSummary
+    );
   },
 
   // Computed nights
@@ -83,8 +131,10 @@ const useBookingStore = create((set, get) => ({
 
   // ===== ROOM SELECTION ACTIONS =====
   setSelectedRoom: (room) => set({ selectedRoom: room }),
+  setSelectedOffer: (offer) => set({ selectedOffer: offer }),
   
   clearSelectedRoom: () => set({ selectedRoom: null }),
+  clearSelectedOffer: () => set({ selectedOffer: null }),
 
   // ===== BOOKING ACTIONS =====
   // Prepare booking with all necessary data
@@ -100,6 +150,11 @@ const useBookingStore = create((set, get) => ({
   clearBooking: () => set({
     selectedHotel: null,
     selectedRoom: null,
+    selectedOffer: null,
+    prebookId: null,
+    transactionId: null,
+    secretKey: null,
+    bookingSummary: null,
   }),
 
   // Reset everything
@@ -111,6 +166,29 @@ const useBookingStore = create((set, get) => ({
     rooms: 1,
     selectedHotel: null,
     selectedRoom: null,
+    selectedOffer: null,
+    prebookId: null,
+    transactionId: null,
+    secretKey: null,
+    bookingSummary: null,
+  }),
+
+  // ===== LITEAPI FLOW STATE =====
+  prebookId: null,
+  transactionId: null,
+  secretKey: null,
+  bookingSummary: null,
+
+  setPrebookResult: ({ prebookId, transactionId, secretKey }) =>
+    set({ prebookId, transactionId, secretKey }),
+
+  setBookingSummary: (summary) => set({ bookingSummary: summary }),
+
+  resetPrebook: () => set({
+    prebookId: null,
+    transactionId: null,
+    secretKey: null,
+    bookingSummary: null,
   }),
 }));
 

@@ -12,6 +12,7 @@ import { trackAffiliateEvent } from '@/utils/affiliateEvents';
 import useAuthStore from '@/stores/useAuthStore';
 import { useSavedHotelIds } from '@/hooks/useSavedHotelIds';
 import { getBookingLabel, getPriceMicrocopy } from '@/utils/bookingCopy';
+import useBookingStore from '@/stores/useBookingStore';
 
 
 const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold, checkIn: propCheckIn, checkOut: propCheckOut, guests: propGuests }) => {
@@ -22,6 +23,7 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold, c
   const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
   const user = useAuthStore((state) => state.user);
   const initialized = useAuthStore((state) => state.initialized);
+  const setExpectedCheapestPrice = useBookingStore((state) => state.setExpectedCheapestPrice);
   const { isHotelSaved, toggleHotelSaved } = useSavedHotelIds();
   const [isToggling, setIsToggling] = useState(false);
   const impressionFired = useRef(false);
@@ -41,6 +43,20 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold, c
   const linkTo = seoCity 
     ? `/hotel/${hotelId}?city=${seoCity}` 
     : `/hotel/${hotelId}`;
+
+  const handleCardClick = (e) => {
+    // Prevent navigation when clicking buttons inside the card
+    // (favorite, book CTA, etc.)
+    if (e.target.closest('button') || e.target.closest('[role="button"]')) {
+      return;
+    }
+    // Store the expected cheapest price before navigating
+    if (hotel.price && hotel.price > 0) {
+      setExpectedCheapestPrice(hotel.price);
+    }
+    // Navigate using the same logic you already have
+    navigate(linkTo);
+  };
 
   // Construct Affiliate Link with Tracking Params
   const currentPath = location.pathname + location.search;
@@ -75,6 +91,8 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold, c
 
   const citySlugForEvent = citySlugFromPath || hotel.citySlug || null;
   const filterSlugForEvent = filterSlugFromPath || null;
+
+
 
   useEffect(() => {
     if (impressionFired.current) return;
@@ -241,11 +259,8 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold, c
   }
 
   return (
-    <div className="group card-luxury relative flex flex-col h-full">
-      <Link
-        to={linkTo}
-        className="block relative aspect-[4/3] overflow-hidden"
-      >
+    <div className="group card-luxury relative flex flex-col h-full" onClick={handleCardClick}>
+      <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true" />
         <img
           src={hotel.image}
           alt={hotel.name}
@@ -315,7 +330,6 @@ const HotelCard = ({ hotel, variant = 'default', cityAverage, budgetThreshold, c
             </div>
           )}
         </div>
-      </Link>
       
       <div className="p-5 flex flex-col flex-grow">
         <Link to={linkTo} className="block mb-2">

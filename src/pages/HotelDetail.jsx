@@ -48,7 +48,9 @@ import RoomTypeList from '@/components/RoomTypeList';
 import Reviews from '@/components/Reviews';
 import HotelGallery from '@/components/HotelGallery';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from 'sonner';
 import { getBookingLabel, getPriceMicrocopy } from '@/utils/bookingCopy';
+
 
 const facilityIcons = {
   Spa: Waves,
@@ -102,7 +104,25 @@ const HotelDetail = () => {
     setRooms,
     setSelectedHotel,
     getNights,
+    selectedOffer,
+    setSelectedOffer,
   } = useBookingStore();
+
+  // Sync URL params to store on mount (for /go/hotel/:hotelId)
+  useEffect(() => {
+    const urlCheckIn = searchParams.get('checkIn');
+    const urlCheckOut = searchParams.get('checkOut');
+    const urlGuests = searchParams.get('guests');
+    const urlRooms = searchParams.get('rooms');
+    const urlPreferredRoom = searchParams.get('preferredRoom');
+
+    if (urlCheckIn && urlCheckIn !== checkIn) setCheckIn(urlCheckIn);
+    if (urlCheckOut && urlCheckOut !== checkOut) setCheckOut(urlCheckOut);
+    if (urlGuests && Number(urlGuests) !== guests) setGuests(Number(urlGuests));
+    if (urlRooms && Number(urlRooms) !== rooms) setRooms(Number(urlRooms));
+    
+    // Note: preferredRoom param handling might need to wait for hotel data load to map to index
+  }, [searchParams, setCheckIn, setCheckOut, setGuests, setRooms]);
 
   const { getBadges, getBetterAlternative, shouldHideHotel, sortHotelsByRevenue } = useRevenueEngine();
 
@@ -199,46 +219,6 @@ const HotelDetail = () => {
   
   const cityName = knownCity ? knownCity.cityName : (hotel?.city || 'City');
 
-  // Room Rate Selection State
-  const [selectedRateId, setSelectedRateId] = useState(null);
-  const [selectedPrice, setSelectedPrice] = useState(null);
-
-  // Initialize with cheapest rate when hotel loads
-  useEffect(() => {
-    if (hotel?.roomTypes?.length > 0) {
-      let minPrice = Infinity;
-      let minRateId = null;
-
-      hotel.roomTypes.forEach((room, rIndex) => {
-        if (room.rates) {
-          room.rates.forEach((rate, rateIndex) => {
-             const price = rate.retailRate?.total?.[0]?.amount;
-             if (price && price < minPrice) {
-               minPrice = price;
-               minRateId = rate.id || `${rIndex}-${rateIndex}`;
-             }
-          });
-        }
-      });
-
-      if (minPrice !== Infinity) {
-        setSelectedPrice(minPrice);
-        setSelectedRateId(minRateId);
-      } else {
-         // Fallback to hotel.price if no specific rates found
-         setSelectedPrice(hotel.price);
-      }
-    } else if (hotel?.price) {
-        setSelectedPrice(hotel.price);
-    }
-  }, [hotel]);
-
-  // Handle manual rate selection
-  const handleRateSelect = (rateId, price) => {
-    setSelectedRateId(rateId);
-    setSelectedPrice(price);
-  };
-
 
   // ✅ Corrected Logic: Prioritize LiteAPI ID, fallback to destination string
   const similarSearchParams = useMemo(() => {
@@ -324,8 +304,9 @@ const HotelDetail = () => {
       : 0;
   const isGreatDeal = Boolean(cityAverage && hotel?.price && hotel.price < cityAverage);
   const isPremium = Boolean(cityAverage && hotel?.price && hotel.price > cityAverage);
-  const isBudgetHotel =
-    budgetThreshold && hotel?.price && hotel.price > 0 && hotel.price <= budgetThreshold;
+  const isBudgetHotel = budgetThreshold && hotel?.price && hotel.price > 0 && hotel.price <= budgetThreshold;
+
+  const preferredRoomPrice = null; // Deprecated
 
   const revenueBadges = hotel ? getBadges(hotel.liteApiId || hotel.id) : [];
   const isTopConverting = revenueBadges.some(b => b.type === 'top_converting');
@@ -393,10 +374,105 @@ const HotelDetail = () => {
     };
   }, [hotel, canShowExit, citySlugFromParams, location]);
 
+  useEffect(() => {
+    if (!hotel?.liteApiId) return; // Only for LiteAPI hotels
+    if (!hotel.roomTypes?.length) return;
+    if (selectedOffer?.offerId) return; // Already selected
+    
+    const expectedPrice = useBookingStore.getState().expectedCheapestPrice;
+    
+    let cheapestPrice = Infinity;
+    let cheapestOfferData = null;
+    let bestMatchPrice = Infinity;
+    let bestMatchOfferData = null;
+    
+    hotel.roomTypes.forEach((room) => {
+      // Check room.offerId exists first
+      if (!room.offerId) {
+        console.warn('Room missing offerId:', room.name);
+        return; // Skip this room
+      }
+
+      room.rates?.forEach((rate) => {
+        const price = rate.retailRate?.total?.[0]?.amount || Infinity;
+        
+        // Track overall cheapest
+        if (price < cheapestPrice) {
+          cheapestPrice = price;
+          cheapestOfferData = {
+            offerId: room.offerId,  // Use room.offerId
+            hotelId: hotel.liteApiId,
+            mappedRoomId: room.mappedRoomId,
+            roomName: room.name,
+            boardName: rate.boardBasis?.description || 'Room Only',
+            refundableTag: rate.cancellationPolicies?.length > 0 ? 'RFN' : 'NRFN',
+            price: { amount: price, currency: rate.retailRate?.total?.[0]?.currency || 'USD' }
+          };
+        }
+        
+        // If we have an expected price, find the best match
+        if (expectedPrice) {
+          const priceDiff = Math.abs(price - expectedPrice);
+          if (priceDiff < bestMatchPrice) {
+            bestMatchPrice = priceDiff;
+            bestMatchOfferData = {
+              offerId: room.offerId,  // Use room.offerId
+              hotelId: hotel.liteApiId,
+              mappedRoomId: room.mappedRoomId,
+              roomName: room.name,
+              boardName: rate.boardBasis?.description || 'Room Only',
+              refundableTag: rate.cancellationPolicies?.length > 0 ? 'RFN' : 'NRFN',
+              price: { amount: price, currency: rate.retailRate?.total?.[0]?.currency || 'USD' }
+            };
+          }
+        }
+      });
+    });
+    
+    const offerToSelect = (expectedPrice && bestMatchOfferData) ? bestMatchOfferData : cheapestOfferData;
+    
+    if (offerToSelect) {
+      console.log('Auto-selecting offer:', offerToSelect);
+      setSelectedOffer(offerToSelect);
+    }
+    
+    useBookingStore.getState().clearExpectedCheapestPrice();
+  }, [hotel, setSelectedOffer]);
+
+
+// clear seledted room 
+useEffect(() => {
+  if (selectedOffer && selectedOffer.hotelId !== hotel?.liteApiId) {
+    setSelectedOffer(null); // Clear if from different hotel
+  }
+}, [hotel, selectedOffer, setSelectedOffer]);
+
+// DEBUG: Log selection state
+useEffect(() => {
+  console.log('=== SELECTION STATE ===');
+  console.log('selectedOffer:', selectedOffer);
+  if (hotel?.roomTypes) {
+    hotel.roomTypes.forEach((room, idx) => {
+      room.rates?.forEach((rate, rIdx) => {
+        const isMatch = selectedOffer?.offerId === rate.offerId;
+        console.log(`Room ${idx}, Rate ${rIdx}:`, {
+          offerId: rate.offerId,
+          price: rate.retailRate?.total?.[0]?.amount,
+          isMatch
+        });
+      });
+    });
+  }
+}, [selectedOffer, hotel]);
+
   // Affiliate Logic - MOVED UP before conditional returns to fix React Hook Error
   const affiliateParams = useMemo(() => {
      if (!hotel?.liteApiId) return '';
-     return new URLSearchParams({
+
+     // Determine preferred room ID from selected offer (rate-level selection)
+     const preferredRoomId = selectedOffer?.mappedRoomId || null;
+
+     const params = {
       city: hotel.city || hotel.location || 'unknown',
       hotel: hotel.name || 'hotel',
       price: hotel.price ? hotel.price.toString() : '0',
@@ -405,10 +481,17 @@ const HotelDetail = () => {
       checkOut: checkOut || '',
       guests: guests ? guests.toString() : '',
       rooms: rooms ? rooms.toString() : '',
-    }).toString();
-  }, [hotel, location.pathname, checkIn, checkOut, guests, rooms]);
+    };
 
-  const affiliateLink = hotel?.liteApiId ? `/go/hotel/${hotelId}?${affiliateParams}` : null;
+    if (preferredRoomId) {
+      params.preferredRoom = preferredRoomId;
+    }
+
+    return new URLSearchParams(params).toString();
+  }, [hotel, location.pathname, checkIn, checkOut, guests, rooms, selectedOffer]);
+
+  // Force manual handling via handleBookNow for validation
+  const checkoutLink = null;
 
   if (isLiteApiHotel && loading) {
     return (
@@ -451,7 +534,6 @@ const HotelDetail = () => {
       console.log('Hotel ID:', hotelIdForUrl);
       console.log('City:', hotel.city || hotel.location);
       console.log('Price:', hotel.price);
-      console.log('Direct Booking URL:', hotel.bookingUrl);
       console.groupEnd();
 
       if (!window.confirm('DEBUG MODE: Continue redirect?')) {
@@ -470,30 +552,14 @@ const HotelDetail = () => {
       source: hotel.liteApiId ? 'liteapi' : 'static'
     });
 
-    if (process.env.NODE_ENV === 'development') {
-      if (!hotelIdForUrl || (!hotel.city && !hotel.location)) {
-         console.warn('[Telemetry Warning] Missing critical tracking data:', { hotelId: hotelIdForUrl, city: hotel.city || hotel.location });
-      }
-      if (!impressionFired.current) {
-         console.warn('[Telemetry Warning] Affiliate redirect fired without impression event:', { hotelId: hotelIdForUrl });
-      }
-    }
-
-    trackAffiliateEvent({
-      eventType: 'view_deal_click',
-      hotelId: hotelIdForUrl,
-      citySlug: citySlugFromParams || hotel.citySlug || null,
-      filterSlug: null,
-      pageUrl: `${location.pathname}${location.search}`,
-    });
-
-    // 👉 LITEAPI hotels: Browser handles the <a> tag navigation (affiliateLink)
-    // We only need to handle navigation for static hotels here.
-    if (hotel.liteApiId) {
+    // Validate offer selection for LiteAPI hotels
+    if (hotel.liteApiId && !selectedOffer?.offerId) {
+      toast.error("Please select a room rate to proceed");
+      document.getElementById('room-types')?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
 
-    // 👉 Static hotels go to checkout
+    // Proceed to checkout
     setSelectedHotel(hotel);
 
     const checkoutParams = {
@@ -503,9 +569,10 @@ const HotelDetail = () => {
     if (checkOut) checkoutParams.checkOut = checkOut;
     if (guests && guests !== 2) checkoutParams.guests = guests.toString();
     if (rooms && rooms !== 1) checkoutParams.rooms = rooms.toString();
+    if (selectedOffer?.offerId) checkoutParams.offerId = selectedOffer.offerId;
 
     navigate({
-      pathname: '/checkout',
+      pathname: `/checkout/${hotelIdForUrl}`,
       search: createSearchParams(checkoutParams).toString(),
     });
   };
@@ -513,14 +580,7 @@ const HotelDetail = () => {
 
   // Calculate nights from global store dates
   const nights = getNights();
-  // Use selectedPrice if available, fallback to hotel.price, ensure never 0
-  const effectivePrice = selectedPrice || hotel.price || 0;
-  const subtotal = effectivePrice * nights;
-  const serviceFee = Math.round(subtotal * 0.1);
-  const total = subtotal + serviceFee;
-
-  // Limit guest selection to hotel capacity
-  const maxGuests = hotel.guests;
+  
 
   // Internal Linking Logic
   // cityName is already defined above
@@ -579,6 +639,12 @@ const HotelDetail = () => {
       ]
     }
   };
+
+  // Indicative (discovery-only) per-night price
+const indicativePerNight = selectedOffer 
+  ? (selectedOffer.price.amount / Math.max(1, getNights())) 
+  : (hotel.price ?? 0);
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -691,19 +757,19 @@ const HotelDetail = () => {
                 </div>
               </div>
 
-              <Tabs defaultValue="overview" className="w-full">
+              <Tabs defaultValue="rooms" className="w-full">
                 <TabsList className="mb-8 w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
-                  <TabsTrigger 
-                    value="overview"
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium text-muted-foreground data-[state=active]:text-foreground shadow-none"
-                  >
-                    Overview
-                  </TabsTrigger>
                   <TabsTrigger 
                     value="rooms"
                     className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium text-muted-foreground data-[state=active]:text-foreground shadow-none"
                   >
                     Rooms
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="overview"
+                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 font-medium text-muted-foreground data-[state=active]:text-foreground shadow-none"
+                  >
+                    Overview
                   </TabsTrigger>
                   <TabsTrigger 
                     value="reviews"
@@ -814,12 +880,13 @@ const HotelDetail = () => {
                 </TabsContent>
 
                 <TabsContent value="rooms" className="animate-in fade-in duration-500">
-                  <RoomTypeList 
-                    roomTypes={hotel.roomTypes} 
-                    hotelImages={hotel.images || [hotel.image]}
-                    selectedRateId={selectedRateId}
-                    onSelectRate={handleRateSelect}
-                  />
+<RoomTypeList 
+  roomTypes={hotel.roomTypes} 
+  hotelImages={hotel.images || [hotel.image]}
+  selectedOffer={selectedOffer}
+  onSelectOffer={setSelectedOffer}
+  hotelId={hotel.liteApiId || hotel.id}
+/>
                 </TabsContent>
 
                 <TabsContent value="reviews" className="animate-in fade-in duration-500">
@@ -831,7 +898,7 @@ const HotelDetail = () => {
             {/* Booking Card */}
             <div className="lg:col-span-1">
               <div className="sticky top-28 bg-card border border-border rounded-xl p-6 shadow-luxury-md">
-                <PriceAnchor price={effectivePrice} size="lg" className="mb-2" />
+                <PriceAnchor price={Math.ceil(indicativePerNight)} size="lg" className="mb-2" />
                 <ScarcityBadge hotel={hotel} className="mt-1" />
 
                 <div className="space-y-4 mb-6">
@@ -861,124 +928,94 @@ const HotelDetail = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">
-                      Rooms & Guests
-                    </label>
-                    <div className="relative">
-                      <button
-                        onClick={() => setIsRoomConfigOpen(!isRoomConfigOpen)}
-                        className="w-full px-3 py-2 border border-border rounded-md text-sm text-left focus:outline-none focus:ring-2 focus:ring-accent/20 flex items-center justify-between bg-background"
-                      >
-                        <span>
-                          {rooms} Room{rooms > 1 ? 's' : ''}, {guests} Guest{guests > 1 ? 's' : ''}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 transition-transform ${isRoomConfigOpen ? 'rotate-180' : ''}`} />
-                      </button>
+  <label className="block text-xs font-medium text-muted-foreground mb-1">
+    Guests
+  </label>
+  <div className="relative">
+    <button
+      onClick={() => setIsRoomConfigOpen(!isRoomConfigOpen)}
+      className="w-full px-3 py-2 border border-border rounded-md text-sm text-left focus:outline-none focus:ring-2 focus:ring-accent/20 flex items-center justify-between bg-background"
+    >
+<span>
+  1 Room, {guests} Guest{guests > 1 ? 's' : ''}
+</span>
+      <ChevronDown className={`w-4 h-4 transition-transform ${isRoomConfigOpen ? 'rotate-180' : ''}`} />
+    </button>
 
-                      {/* Room Config Popover */}
-                      {isRoomConfigOpen && (
-                        <>
-                          <div 
-                            className="fixed inset-0 z-40 bg-transparent"
-                            onClick={() => setIsRoomConfigOpen(false)}
-                          />
-                          <div className="absolute top-full left-0 right-0 mt-2 p-4 bg-card border border-border rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="flex items-center justify-between mb-4">
-                              <h3 className="font-medium text-sm">Configuring Rooms</h3>
-                              <button 
-                                onClick={() => setIsRoomConfigOpen(false)}
-                                className="text-xs text-accent hover:underline"
-                              >
-                                Done
-                              </button>
-                            </div>
+    {/* Only allow adjusting GUESTS, not rooms */}
+    {isRoomConfigOpen && (
+      <>
+        <div 
+          className="fixed inset-0 z-40 bg-transparent"
+          onClick={() => setIsRoomConfigOpen(false)}
+        />
+        <div className="absolute top-full left-0 right-0 mt-2 p-4 bg-card border border-border rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium text-sm">Adjust Guests</h3>
+            <button 
+              onClick={() => setIsRoomConfigOpen(false)}
+              className="text-xs text-accent hover:underline"
+            >
+              Done
+            </button>
+          </div>
 
-                            <div className="space-y-4">
-                              {/* Rooms Counter */}
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Rooms</span>
-                                <div className="flex items-center gap-3">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setRooms(Math.max(1, rooms - 1));
-                                    }}
-                                    disabled={rooms <= 1}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </button>
-                                  <span className="w-4 text-center text-sm font-medium">{rooms}</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setRooms(Math.min(10, rooms + 1));
-                                    }}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary transition-colors"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Total Guests</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setGuests(Math.max(1, guests - 1))}
+                disabled={guests <= 1}
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Minus className="w-3 h-3" />
+              </button>
+              <span className="w-4 text-center text-sm font-medium">{guests}</span>
+              <button
+                onClick={() => setGuests(Math.min(20, guests + 1))}
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    )}
+  </div>
+</div>
 
-                              {/* Guests Counter */}
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">Guests</span>
-                                <div className="flex items-center gap-3">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setGuests(Math.max(1, guests - 1));
-                                    }}
-                                    disabled={guests <= 1}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </button>
-                                  <span className="w-4 text-center text-sm font-medium">{guests}</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setGuests(Math.min(20, guests + 1));
-                                    }}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-secondary transition-colors"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  
                 </div>
 
-                {/* Price Breakdown */}
-                <div className="space-y-3 py-4 border-t border-b border-border mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      ${Math.ceil(effectivePrice).toLocaleString()} x {nights} night{nights > 1 ? 's' : ''}
-                    </span>
-                    <span>${Math.ceil(subtotal).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Service fee</span>
-                    <span>${Math.ceil(serviceFee).toLocaleString()}</span>
-                  </div>
-                </div>
+                {/* SIMPLIFIED for Discovery Mode */}
+<div className="py-4 border-t border-border mb-4">
+  <p className="text-sm text-muted-foreground">
+    {selectedOffer 
+      ? `Selected: ${selectedOffer.roomName}`
+      : 'Starting from'}
+  </p>
+  <div className="flex items-baseline gap-2">
+    <p className="text-2xl font-semibold">
+      ${Math.ceil(selectedOffer ? selectedOffer.price.amount : indicativePerNight).toLocaleString()}
+    </p>
+    {selectedOffer ? (
+      <span className="text-sm text-muted-foreground">total for {getNights()} nights</span>
+    ) : (
+      <span className="text-sm text-muted-foreground">/night</span>
+    )}
+  </div>
+  <p className="text-xs text-muted-foreground mt-1">
+    {selectedOffer ? 'Includes taxes & fees' : 'Final price shown after availability check'}
+  </p>
+</div>
 
-                <div className="flex justify-between font-medium mb-6">
-                  <span>Total</span>
-                  <span className="text-lg">${Math.ceil(total).toLocaleString()}</span>
-                </div>
 
                 <BookingCTA
-                  href={affiliateLink || undefined}
+                  href={checkoutLink || undefined}
                   onClick={handleBookNow}
-                  label={bookingLabel}
-                  size="lg"
+                  label={hotel.liteApiId ? (selectedOffer?.offerId ? "Continue to Checkout" : "Select a Room") : "Check Availability"}                  
+                    size="lg"
                 />
                 {priceMicrocopy && (
                   <p className="mt-2 text-xs text-muted-foreground text-center">

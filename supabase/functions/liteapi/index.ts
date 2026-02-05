@@ -161,105 +161,132 @@ function normalizeHotel(hotel: any, rates?: any) {
     rawData: { hotel, rates },
     rooms: normalizedRooms, // Expose full room list for white-label UI
     roomTypes: (() => {
-    // Extract static room data with photos from rawData
-    const staticRooms = hotel.rooms || [];
-    const staticRoomMap = new Map();
+        // Extract static room data with photos from rawData
+        const staticRooms = hotel.rooms || [];
+        const staticRoomMap = new Map();
 
-    staticRooms.forEach(room => {
-    const roomImages = room.photos && Array.isArray(room.photos)
-      ? room.photos.map(photo => photo.hd_url || photo.url).filter(Boolean)
-      : [];
+        staticRooms.forEach(room => {
+          const roomImages = room.photos && Array.isArray(room.photos)
+            ? room.photos.map(photo => photo.hd_url || photo.url).filter(Boolean)
+            : [];
 
-    const amenities = room.roomAmenities && Array.isArray(room.roomAmenities)
-      ? room.roomAmenities.map(a => a.name).filter(Boolean)
-      : [];
+          const amenities = room.roomAmenities && Array.isArray(room.roomAmenities)
+            ? room.roomAmenities.map(a => a.name).filter(Boolean)
+            : [];
 
-    // Store by room ID
-    staticRoomMap.set(room.id, {
-      images: roomImages,
-      amenities: amenities,
-      description: room.description,
-      size: room.roomSizeSquare,
-      bedType: room.bedTypes?.[0]?.bedType,
-      roomName: room.roomName, // ✅ ADDED for name matching
-    });
-    });
+          // Store by room ID
+          staticRoomMap.set(room.id, {
+            images: roomImages,
+            amenities: amenities,
+            description: room.description,
+            size: room.roomSizeSquare,
+            bedType: room.bedTypes?.[0]?.bedType,
+            roomName: room.roomName,
+          });
+        });
 
-    // Helper: Find static room by name similarity (fuzzy matching)
-    const findStaticRoomByName = (rateName) => {
-    if (!rateName) return null;
+        // ✅ IMPROVED: Helper to find static room by name similarity with better matching
+        const findStaticRoomByName = (rateName) => {
+          if (!rateName) return null;
 
-    const normalize = (str) => str.toLowerCase()
-      .replace(/[^a-z0-9]/g, '') // Remove special chars
-      .replace(/\s+/g, ''); // Remove spaces
+          // ✅ NEW: Trim extras like " - ideal for..." or " TEST..."
+          const trimmedName = rateName.split(' - ')[0].split(' TEST ')[0].trim();
 
-    const normalizedRateName = normalize(rateName);
+          const normalize = (str) => str.toLowerCase()
+            .replace(/[^a-z0-9]/g, '') // Remove special chars
+            .replace(/\s+/g, ''); // Remove spaces
 
-    // Try exact ID match first
-    for (const [id, data] of staticRoomMap.entries()) {
-      if (normalize(data.roomName) === normalizedRateName) {
-        return { id, ...data };
-      }
-    }
+          const normalizedRateName = normalize(trimmedName);
 
-    // Try partial match (contains)
-    for (const [id, data] of staticRoomMap.entries()) {
-      const normalizedStaticName = normalize(data.roomName);
-      if (normalizedStaticName.includes(normalizedRateName) || 
-          normalizedRateName.includes(normalizedStaticName)) {
-        return { id, ...data };
-      }
-    }
+          // Try exact match first
+          for (const [id, data] of staticRoomMap.entries()) {
+            if (normalize(data.roomName) === normalizedRateName) {
+              return { id, ...data };
+            }
+          }
 
-    return null;
-    };
+          // ✅ IMPROVED: Partial match with scoring threshold
+          let bestMatch = null;
+          let bestScore = 0;
+          for (const [id, data] of staticRoomMap.entries()) {
+            const normalizedStatic = normalize(data.roomName);
+            
+            // Calculate match score
+            const score = normalizedRateName.includes(normalizedStatic) 
+              ? normalizedStatic.length / normalizedRateName.length 
+              : 0;
+            
+            // Only accept matches above 60% confidence
+            if (score > bestScore && score > 0.6) {
+              bestScore = score;
+              bestMatch = { id, ...data };
+            }
+          }
+          
+          return bestMatch;
+        };
 
-    // If we have live rates, merge with static room data
-    if (availableRooms && availableRooms.length > 0) {
-    return availableRooms.map(room => {
-      // Try multiple matching strategies
-      let staticData = staticRoomMap.get(room.roomTypeId || room.id);
-      
-      // If no match by ID, try matching by name
-      if (!staticData && room.name) {
-        const match = findStaticRoomByName(room.name);
-        if (match) {
-          staticData = match;
+        // If we have live rates, merge with static room data
+        if (availableRooms && availableRooms.length > 0) {
+          return availableRooms.map(room => {
+            // Try multiple matching strategies
+            let staticData = staticRoomMap.get(room.roomTypeId || room.id);
+            
+            // If no match by ID, try matching by name
+            if (!staticData && room.name) {
+              const match = findStaticRoomByName(room.name);
+              if (match) {
+                staticData = match;
+              }
+            }
+            
+            // Fallback to empty object if no match found
+            staticData = staticData || {};
+
+            // ✅ CRITICAL FIX: Enrich rates with offerId and context
+            const enrichedRates = (room.rates || []).map(rate => {
+              // ✅ IMPORTANT: offerId comes from the ROOM level, not rate level
+              const offerId = rate.offerId || room.offerId || `${room.roomTypeId || room.id}_${rate.rateId || Math.random()}`;
+              
+              return {
+                ...rate,
+                offerId: offerId,  // Attach offerId here
+                roomTypeId: room.roomTypeId || room.id,
+                roomName: room.name || staticData.roomName,
+                mappedRoomId: room.mappedRoomId || room.roomTypeId || staticData.id,
+              };
+            });
+            
+            return {
+              ...room,
+              images: staticData.images || [],
+              amenities: staticData.amenities || room.amenities || [],
+              description: staticData.description || room.description || '',
+              maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
+              size: staticData.size || room.roomSizeSquare || null,
+              bedType: staticData.bedType || room.bedTypes?.[0]?.bedType || null,
+              rates: enrichedRates,  // ✅ Use enriched rates with offerId
+            };
+          });
         }
-      }
-      
-    // Fallback to empty object if no match found
-    staticData = staticData || {};
-      
-      return {
-        ...room,
-        images: staticData.images || [],
-        amenities: staticData.amenities || room.amenities || [],
-        description: staticData.description || room.description || '',
-        maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
-        size: staticData.size || room.roomSizeSquare || null,
-        bedType: staticData.bedType || room.bedTypes?.[0]?.bedType || null,
-      };
-    });
-    }
 
-    // Fallback: Return static rooms with empty rates (when no dates selected)
-    return staticRooms.map(room => {
-    const staticData = staticRoomMap.get(room.id) || {};
+        // Fallback: Return static rooms with empty rates (when no dates selected)
+        return staticRooms.map(room => {
+          const staticData = staticRoomMap.get(room.id) || {};
 
-    return {
-      id: room.id,
-      roomTypeId: room.id,
-      name: room.roomName,
-      description: staticData.description || '',
-      images: staticData.images || [],
-      amenities: staticData.amenities || [],
-      maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
-      size: staticData.size || null,
-      bedType: staticData.bedType || null,
-      rates: [],
-    };
-    });
+          return {
+            id: room.id,
+            roomTypeId: room.id,
+            name: room.roomName,
+            description: staticData.description || '',
+            images: staticData.images || [],
+            amenities: staticData.amenities || [],
+            maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
+            size: staticData.size || null,
+            bedType: staticData.bedType || null,
+            rates: [],
+          };
+        });
     })(),
     priceSource: hasLiveRates ? "liteapi-live" : "static",
   };
@@ -689,6 +716,12 @@ serve(async (req) => {
         { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       );
     } else if (action === 'book') {
+      // ────────────────────────────────────────────────
+      // DEPRECATED: Use prebook → confirm flow instead
+      // This endpoint is kept for backward compatibility only
+      // Frontend should NEVER call this anymore
+      // ────────────────────────────────────────────────
+
       const hotelId = url.searchParams.get('hotelId');
       const checkIn = url.searchParams.get('checkIn') || '';
       const checkOut = url.searchParams.get('checkOut') || '';
@@ -781,6 +814,135 @@ serve(async (req) => {
         console.error('Booking API exception:', error);
         return new Response(
           JSON.stringify({ error: 'Booking link not available' }),
+          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      }
+    } else if (action === 'prebook') {
+      const offerId = url.searchParams.get('offerId');
+      const checkIn = url.searchParams.get('checkIn');
+      const checkOut = url.searchParams.get('checkOut');
+      const occupancies = url.searchParams.get('occupancies'); // can be JSON string
+      const currency = url.searchParams.get('currency') || 'USD';
+
+      if (!offerId) {
+        return new Response(
+          JSON.stringify({ error: 'offerId is required' }),
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const prebookUrl = `https://book.liteapi.travel/v3.0/rates/prebook`;
+
+      const bodyPayload: any = { offerId };
+
+      // Add context if available from frontend
+      if (checkIn) bodyPayload.checkin = checkIn;
+      if (checkOut) bodyPayload.checkout = checkOut;
+      if (currency) bodyPayload.currency = currency;
+
+      // Parse occupancies if sent as string
+      if (occupancies) {
+        try {
+          bodyPayload.occupancies = JSON.parse(occupancies);
+        } catch (e) {
+          console.warn('Invalid occupancies JSON:', occupancies);
+        }
+      }
+
+      try {
+        const response = await fetch(prebookUrl, {
+          method: 'POST',
+          headers: {
+            'X-API-Key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(bodyPayload),
+        });
+
+        const rawText = await response.text();
+        let json: any = {};
+        try {
+          json = JSON.parse(rawText);
+        } catch {
+          json = { raw: rawText };
+        }
+
+        if (!response.ok) {
+          return new Response(
+            JSON.stringify({ error: json?.error?.message || 'Prebook failed' }),
+            { status: response.status, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const prebookId = json.prebookId || json.data?.prebookId;
+        const transactionId = json.transactionId || json.data?.transactionId;
+        const secretKey = json.secretKey || json.data?.secretKey;
+        const pricing = json.pricing || json.data?.pricing;
+        const cancellation = json.cancellation || json.data?.cancellation;
+
+        return new Response(
+          JSON.stringify({ prebookId, transactionId, secretKey, pricing, cancellation }),
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('Prebook error:', error);
+        return new Response(
+          JSON.stringify({ error: 'Prebook failed' }),
+          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      }
+    } else if (action === 'confirm') {
+      const prebookId = url.searchParams.get('prebookId');
+      const transactionId = url.searchParams.get('transactionId');
+      if (!prebookId || !transactionId) {
+        return new Response(
+          JSON.stringify({ error: 'prebookId and transactionId are required' }),
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      }
+      let body: any = {};
+      try {
+        body = await req.json();
+      } catch {
+        body = {};
+      }
+      const bookUrl = `https://book.liteapi.travel/v3.0/rates/book`;
+      try {
+        const response = await fetch(bookUrl, {
+          method: 'POST',
+          headers: {
+            'X-API-Key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prebookId,
+            transactionId,
+            guest: body.guest || {},
+          }),
+        });
+        const rawText = await response.text();
+        let json: any = {};
+        try {
+          json = JSON.parse(rawText);
+        } catch (_) {
+          json = { raw: rawText };
+        }
+        if (!response.ok) {
+          return new Response(
+            JSON.stringify({ error: json?.error?.message || 'Booking failed' }),
+            { status: response.status, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+          );
+        }
+        const bookingId = json.bookingId || json.data?.bookingId;
+        const confirmationCode = json.confirmationCode || json.data?.confirmationCode;
+        const summary = json.summary || json.data?.summary || json;
+        return new Response(
+          JSON.stringify({ bookingId, confirmationCode, summary }),
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        return new Response(
+          JSON.stringify({ error: 'Booking failed' }),
           { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }

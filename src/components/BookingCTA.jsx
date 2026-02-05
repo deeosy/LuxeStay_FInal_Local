@@ -1,56 +1,55 @@
-import React from 'react';
-import { ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, Loader2 } from 'lucide-react';
 
-const BookingCTA = ({
-  href,
-  onClick,
-  label = 'View Best Deal',
-  className = '',
-  size = 'md',
-}) => {
-  const base =
-    'inline-flex items-center justify-center gap-2 rounded-lg font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors transition-transform hover:scale-[1.01] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
+const BookingCTA = ({ href, onClick, label = "Check Availability", size = "default", loading = false, className = "" }) => {
+  const isExternal = href && (href.startsWith('http') || href.startsWith('//'));
+  
+  const baseClasses = "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background";
+  const sizeClasses = size === "lg" ? "h-12 px-8 text-lg" : "h-10 px-4 py-2";
+  const variantClasses = "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200";
 
-  const padding =
-    size === 'lg'
-      ? 'py-3 px-6 text-base'
-      : size === 'sm'
-      ? 'py-1.5 px-3 text-xs'
-      : 'py-2 px-4 text-sm';
+  const content = (
+    <>
+      {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+      {label}
+      {!loading && <ArrowRight className="w-4 h-4 ml-1" />}
+    </>
+  );
 
   if (href) {
+    if (isExternal) {
+      return (
+        <a 
+          href={href} 
+          onClick={onClick}
+          className={`${baseClasses} ${sizeClasses} ${variantClasses} ${className}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {content}
+        </a>
+      );
+    }
     return (
-      <a
-        href={href}
-        onClick={(e) => {
-          // Guardrail: Always allow click through, even if onClick (analytics) fails
-          try {
-             if (onClick) onClick(e);
-          } catch (err) {
-             console.error('Booking click analytics failed (non-blocking)', err);
-          }
-        }}
-        target="_blank"
-        rel="noopener noreferrer nofollow sponsored"
-        className={`w-full ${base} ${padding} ${className}`}
+      <Link 
+        to={href} 
+        onClick={onClick}
+        className={`${baseClasses} ${sizeClasses} ${variantClasses} ${className}`}
       >
-        {label}
-        <ExternalLink className="w-3 h-3" />
-      </a>
+        {content}
+      </Link>
     );
   }
 
   return (
-    <button
-      type="button"
+    <button 
       onClick={onClick}
-      className={`w-full ${base} ${padding} ${className}`}
+      disabled={loading}
+      className={`${baseClasses} ${sizeClasses} ${variantClasses} ${className}`}
     >
-      {label}
-      <ExternalLink className="w-3 h-3" />
+      {content}
     </button>
   );
 };
 
 export default BookingCTA;
-

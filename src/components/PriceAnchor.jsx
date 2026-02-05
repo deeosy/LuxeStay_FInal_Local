@@ -17,7 +17,7 @@ const PriceAnchor = ({ price, className = '', showSuffix = true, size = 'md' }) 
         ${anchorPrice}
       </span>
       <span className={`${valueClass} text-foreground`}>
-        ${price}
+        ${Math.ceil(price).toLocaleString()}
         {showSuffix && (
           <span className="ml-1 text-xs md:text-sm font-normal text-muted-foreground">
             /night

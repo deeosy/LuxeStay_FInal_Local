@@ -23,6 +23,8 @@ import CityCategoryPage from "./pages/CityCategoryPage";
 import PoiLandingPage from "./pages/PoiLandingPage";
 import AdminAffiliate from "./pages/AdminAffiliate";
 import CityHotels from "./pages/CityHotels";
+import GoHotelRedirect from "./pages/GoHotelRedirect";
+import BookingConfirmation from "./pages/BookingConfirmation";
 
 const queryClient = new QueryClient();
 
@@ -129,7 +131,10 @@ const AppRoutes = () => {
       <Route path="/hotels-near-:poiSlug" element={<PoiLandingPage />} />
       <Route path="/hotels-in/:citySlug/:type" element={<CityCategoryPage />} />
       <Route path="/hotel/:id" element={<HotelDetail />} />
+      <Route path="/go/hotel/:hotelId" element={<HotelDetail />} />
       <Route path="/checkout" element={<Checkout />} />
+      <Route path="/checkout/:hotelId" element={<Checkout />} />
+      <Route path="/booking/confirmation" element={<BookingConfirmation />} />
       <Route path="/register" element={<Register />} />
       <Route path="/login" element={<Register />} />
       <Route path="/account" element={<Account />} />

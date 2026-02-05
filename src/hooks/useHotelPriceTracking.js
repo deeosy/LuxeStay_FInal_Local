@@ -5,7 +5,13 @@ import { storePriceDropEvent } from '@/utils/storePriceDropEvent';
 
 export function useHotelPriceTracking() {
   const recordPrice = useCallback(async (hotelId, price) => {
+    // Skip if invalid params
     if (!hotelId || !price) return;
+
+    // Skip LiteAPI IDs (alphanumeric strings) if DB expects Integer/UUID
+    // This prevents 400 Bad Request errors for "lpb..." IDs
+    const isLiteApiId = typeof hotelId === 'string' && !/^[0-9]+$/.test(hotelId) && !/^[0-9a-f]{8}-[0-9a-f]{4}/.test(hotelId);
+    if (isLiteApiId) return;
 
     try {
       // 1. Get the latest price entry for this hotel

@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -25,6 +25,7 @@ const formatDate = (dateString) => {
 const Checkout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { hotelId: routeHotelId } = useParams();
   const isDebug = searchParams.get('debug') === 'true';
   const seoCity = searchParams.get('city');
   
@@ -40,6 +41,13 @@ const Checkout = () => {
     clearBooking,
     setSelectedHotel,
     setSearchParams: setStoreParams,
+    selectedOffer,
+    setSelectedOffer,
+    setPrebookResult,
+    prebookId,
+    transactionId,
+    secretKey,
+    setBookingSummary,
   } = useBookingStore();
 
   // UI-only local state for form inputs
@@ -53,11 +61,13 @@ const Checkout = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Get URL params
-  const urlHotelId = searchParams.get('hotelId');
+  const affiliateUrl = null; // TODO: generate real affiliate URL later
+  const urlHotelId = searchParams.get('hotelId') || routeHotelId || null;
   const urlCheckIn = searchParams.get('checkIn');
   const urlCheckOut = searchParams.get('checkOut');
   const urlGuests = parseInt(searchParams.get('guests')) || 2;
   const urlRooms = parseInt(searchParams.get('rooms')) || 1;
+  const urlOfferId = searchParams.get('offerId');
 
   // Check if it's a static hotel
   const staticHotel = urlHotelId ? allHotels.find((h) => h.id === parseInt(urlHotelId)) : null;
@@ -88,25 +98,28 @@ const Checkout = () => {
         checkIn: urlCheckIn || checkIn,
         checkOut: urlCheckOut || checkOut,
         guests: urlGuests || guests,
+        rooms: urlRooms || rooms,
       });
+      if (urlOfferId && (!selectedOffer || selectedOffer.offerId !== urlOfferId)) {
+        // Hydrate minimal offer data from URL if full object is missing
+        setSelectedOffer({
+          offerId: urlOfferId,
+          // Add minimal fallback if needed, but ideally fetch full offer
+          price: { amount: liteApiHotel?.price || staticHotel?.price || 0, currency: 'USD' },
+          roomName: 'Selected Room',  // Placeholder; better to refetch if critical
+        });
+      }
     }
-  }, [staticHotel, liteApiHotel]);
+  }, [staticHotel, liteApiHotel, urlHotelId, urlCheckIn, urlCheckOut, urlGuests, urlOfferId]);
 
   // Get computed values from store
   const nights = getNights();
   const priceBreakdown = getPriceBreakdown();
 
-  // Build affiliate URL for the booking redirect
-  const affiliateUrl = selectedHotel 
-    ? buildAffiliateUrl({
-        hotel: selectedHotel,
-        checkIn,
-        checkOut,
-        guests,
-        rooms,
-        city: seoCity,
-      })
-    : null;
+  // LiteAPI official booking flow state
+  const [prebookLoading, setPrebookLoading] = useState(false);
+  const [paymentStep, setPaymentStep] = useState(false);
+  const [bookingLoading, setBookingLoading] = useState(false);
 
   // Show loading for LiteAPI hotels
   if (isLiteApiHotel && liteApiLoading) {
@@ -145,86 +158,84 @@ const Checkout = () => {
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleBookNow = async (e) => {
+  const handlePrebook = async (e) => {
     e.preventDefault();
-    
-    // Basic validation
+    if (!selectedOffer?.offerId) {
+      toast.error('No room offer selected. Please choose a room on the hotel page.');
+      navigate(-1);
+      return;
+    }
+    setPrebookLoading(true);
+    try {
+      const params = new URLSearchParams({
+        action: 'prebook',
+        offerId: selectedOffer.offerId,
+      });
+      const res = await fetch(`${import.meta.env.VITE_LITEAPI_BASE}?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok || !data.prebookId || !data.transactionId || !data.secretKey) {
+        throw new Error(data?.error || 'Prebook failed');
+      }
+      setPrebookResult({
+        prebookId: data.prebookId,
+        transactionId: data.transactionId,
+        secretKey: data.secretKey,
+      });
+      toast.success('Offer reserved. Proceed to payment.');
+      setPaymentStep(true);
+    } catch (err) {
+      toast.error(err.message || 'Unable to reserve the offer. It may have expired.');
+    } finally {
+      setPrebookLoading(false);
+    }
+  };
+
+  const handleConfirmBooking = async () => {
+    if (!prebookId || !transactionId) {
+      toast.error('Payment not initialized. Please prebook first.');
+      return;
+    }
     if (!formData.firstName || !formData.lastName || !formData.email) {
       toast.error('Please fill in all required fields');
       return;
     }
-
-    if (isDebug) {
-      console.group('🐞 DEBUG: Affiliate Booking Redirect');
-      console.log('Affiliate URL:', affiliateUrl);
-      console.log('Booking URL (from hotel data):', selectedHotel.bookingUrl);
-      console.log('City:', seoCity || selectedHotel.city);
-      console.log('Hotel ID:', selectedHotel.id || selectedHotel.liteApiId);
-      console.log('Check-in:', checkIn);
-      console.log('Check-out:', checkOut);
-      console.log('Guests:', guests);
-      console.log('Rooms:', rooms);
-      
-      if (affiliateUrl) {
-        try {
-          const urlObj = new URL(affiliateUrl);
-          const params = urlObj.searchParams;
-          console.group('URL Parameter Verification');
-          console.log('Has Check-in:', params.has('checkIn') || params.has('checkin') || params.has('check_in') ? '✅' : '❌');
-          console.log('Has Check-out:', params.has('checkOut') || params.has('checkout') || params.has('check_out') ? '✅' : '❌');
-          console.log('Has Guests:', params.has('guests') || params.has('adults') ? '✅' : '❌');
-          console.log('Has Rooms:', params.has('rooms') ? '✅' : '❌');
-          // Assuming 'refid' is the partner ID param based on common LiteAPI patterns, or just check existence
-          console.log('Full Params:', Object.fromEntries(params.entries()));
-          console.groupEnd();
-        } catch (err) {
-          console.error('Invalid Affiliate URL:', err);
-        }
-      }
-      console.groupEnd();
-
-      if (!window.confirm('DEBUG MODE: Ready to redirect. Check console for details. Proceed?')) {
-        return;
-      }
-    }
-
-    setIsProcessing(true);
-
-    // Simulate brief processing before redirect
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // Track booking click
-    trackBookingClick({
-      hotel_id: selectedHotel.id || selectedHotel.liteApiId,
-      city: seoCity || selectedHotel.city,
-      price: priceBreakdown.total,
-      check_in: checkIn,
-      check_out: checkOut,
-      guests,
-      rooms,
-    });
-
-    const hotelIdForEvent = selectedHotel.id || selectedHotel.liteApiId;
-
-    if (hotelIdForEvent) {
-      trackAffiliateEvent({
-        eventType: 'view_deal_click',
-        hotelId: hotelIdForEvent,
-        citySlug: seoCity || null,
-        filterSlug: null,
+    setBookingLoading(true);
+    try {
+      const params = new URLSearchParams({
+        action: 'confirm',
+        prebookId,
+        transactionId,
       });
+      const res = await fetch(`${import.meta.env.VITE_LITEAPI_BASE}?${params.toString()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guest: {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            phone: formData.phone,
+          }
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.bookingId) {
+        throw new Error(data?.error || 'Booking failed');
+      }
+      setBookingSummary({
+        bookingId: data.bookingId,
+        confirmationCode: data.confirmationCode,
+        hotel: selectedHotel,
+        checkIn,
+        checkOut,
+        price: { total: getPriceBreakdown()?.total || 0 },
+      });
+      navigate('/booking/confirmation');
+    } catch (err) {
+      toast.error(err.message || 'Payment or booking failed.');
+    } finally {
+      setBookingLoading(false);
     }
-
-    // Show toast and redirect to affiliate partner
-    toast.success('Redirecting to our booking partner...');
-    
-    // Open affiliate URL (external redirect)
-    window.open(affiliateUrl, '_blank');
-    
-    // Optional: clear booking after redirect
-    // clearBooking();
-    
-    setIsProcessing(false);
   };
 
   return (
@@ -280,7 +291,7 @@ const Checkout = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Form */}
             <div className="lg:col-span-2">
-              <form onSubmit={handleBookNow} className="space-y-8">
+              <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
                 {/* Guest Details */}
                 <div className="bg-card border border-border rounded-xl p-6">
                   <h2 className="font-display text-xl font-medium mb-6">
@@ -350,26 +361,81 @@ const Checkout = () => {
                 <div className="bg-card border border-border rounded-xl p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="font-display text-xl font-medium">
-                      Complete Your Booking
+                      Payment
                     </h2>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Lock className="w-4 h-4" />
-                      Secure Redirect
+                      Secure Sandbox
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    You'll be redirected to our trusted booking partner to complete your reservation securely. 
-                    Payment will be processed on their platform.
-                  </p>
-                  <div className="bg-secondary/50 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-sm">
-                      <ExternalLink className="w-4 h-4 text-accent" />
-                      <span className="font-medium">Booking Partner</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Your booking details will be securely transferred
-                    </p>
-                  </div>
+                  {!paymentStep ? (
+                    <>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Reserve your selected offer and proceed to payment.
+                      </p>
+                      {/* Show selected offer details */}
+                      {selectedOffer && (
+                        <div className="mb-4 p-3 bg-secondary/30 rounded-lg">
+                          <p className="text-xs font-medium mb-1">Selected Room:</p>
+                          <p className="text-sm">{selectedOffer.roomName}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {selectedOffer.boardName} • {selectedOffer.refundableTag === 'RFN' ? 'Free Cancellation' : 'Non-refundable'}
+                          </p>
+                          <p className="text-sm font-semibold mt-2">
+                            ${Math.ceil(selectedOffer.price.amount).toLocaleString()} total
+                          </p>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handlePrebook}
+                        disabled={prebookLoading || !selectedOffer?.offerId}
+                        className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {prebookLoading ? 'Reserving...' : 'Reserve & Continue'}
+                      </button>
+                      {!selectedOffer?.offerId && (
+                        <p className="text-xs text-red-600 mt-2">
+                          Please select a specific room offer on the hotel page first.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="bg-secondary/50 rounded-lg p-4">
+                        <div className="flex items-center gap-2 text-sm mb-2">
+                          <CreditCard className="w-4 h-4 text-accent" />
+                          <span className="font-medium">Sandbox Payment</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Use test card 4242 4242 4242 4242, any future date and any CVC.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <input className="border border-border rounded-md px-3 py-2 text-sm" placeholder="4242 4242 4242 4242" />
+                          <input className="border border-border rounded-md px-3 py-2 text-sm" placeholder="MM/YY" />
+                          <input className="border border-border rounded-md px-3 py-2 text-sm" placeholder="CVC" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleConfirmBooking}
+                          disabled={bookingLoading}
+                          className="mt-4 w-full btn-accent disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {bookingLoading ? (
+                            <>
+                              <div className="w-5 h-5 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <ExternalLink className="w-5 h-5" />
+                              Pay & Confirm
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Special Requests */}
@@ -389,24 +455,6 @@ const Checkout = () => {
                     Special requests are subject to availability and cannot be guaranteed.
                   </p>
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={isProcessing}
-                  className="w-full btn-accent disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isProcessing ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
-                      Redirecting...
-                    </>
-                  ) : (
-                    <>
-                      <ExternalLink className="w-5 h-5" />
-                      Book Now - ${priceBreakdown?.total || 0}
-                    </>
-                  )}
-                </button>
               </form>
             </div>
 
@@ -450,26 +498,61 @@ const Checkout = () => {
                     <span className="text-muted-foreground">Guests</span>
                     <span>{guests} Guest{guests > 1 ? 's' : ''}</span>
                   </div>
+                  {/* selected room */}
+                    {selectedOffer && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Room</span>
+                        <span className="text-right text-xs">{selectedOffer.roomName}</span>
+                      </div>
+                    )}
+                    {selectedOffer && selectedOffer.boardName && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Meal Plan</span>
+                        <span className="text-right text-xs">{selectedOffer.boardName}</span>
+                      </div>
+                    )}
                 </div>
+                
 
-                {/* Pricing from global store */}
-                <div className="space-y-3 mb-6 pb-6 border-b border-border">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      ${priceBreakdown?.pricePerNight || 0} x {nights} night{nights > 1 ? 's' : ''}
-                    </span>
-                    <span>${priceBreakdown?.subtotal || 0}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Service fee</span>
-                    <span>${priceBreakdown?.serviceFee || 0}</span>
-                  </div>
-                </div>
+{/* Pricing from global store */}
+{!priceBreakdown ? (
+  <div className="space-y-3 mb-6 pb-6 border-b border-border">
+    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+      <p className="text-sm text-yellow-800 mb-2">
+        ⚠️ Price information unavailable
+      </p>
+      <p className="text-xs text-yellow-700">
+        Please go back and select your dates and room to see pricing.
+      </p>
+      <button
+        onClick={() => navigate(-1)}
+        className="mt-3 text-xs text-yellow-900 underline hover:no-underline"
+      >
+        ← Return to hotel page
+      </button>
+    </div>
+  </div>
+) : (
+  <>
+    <div className="space-y-3 mb-6 pb-6 border-b border-border">
+      <div className="flex justify-between text-sm">
+        <span className="text-muted-foreground">
+          ${Math.ceil(priceBreakdown.pricePerNight || 0).toLocaleString()} x {nights} night{nights > 1 ? 's' : ''}
+        </span>
+        <span>${Math.ceil(priceBreakdown.subtotal || 0).toLocaleString()}</span>
+      </div>
+      <div className="flex justify-between text-sm">
+        <span className="text-muted-foreground">Service fee</span>
+        <span>${Math.ceil(priceBreakdown.serviceFee || 0).toLocaleString()}</span>
+      </div>
+    </div>
 
-                <div className="flex justify-between font-medium">
-                  <span>Total</span>
-                  <span className="text-xl">${priceBreakdown?.total || 0}</span>
-                </div>
+    <div className="flex justify-between font-medium">
+      <span>Total</span>
+      <span className="text-xl">${Math.ceil(priceBreakdown.total || 0).toLocaleString()}</span>
+    </div>
+  </>
+)}
 
                 {/* Trust Badges */}
                 <div className="mt-6 pt-6 border-t border-border">
