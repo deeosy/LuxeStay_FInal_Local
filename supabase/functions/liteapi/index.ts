@@ -44,12 +44,10 @@ function setCache(key: string, data: any, ttl: number): void {
 
 // Normalize LiteAPI hotel data to match our frontend format
 function normalizeHotel(hotel: any, rates?: any) {
-  // 1. Dig deep into the rates structure
-  // User Update: Stop relying on 'rooms', use 'roomTypes'
   const availableRooms = rates?.roomTypes || [];
   const hasLiveRates = availableRooms.length > 0;
 
-  // 2. Identify the LOWEST PRICE from ALL roomTypes
+  // Calculate lowest price (unchanged)
   let lowestPrice = Infinity;
   let bestBookingUrl = null;
   const normalizedRooms: any[] = [];
@@ -59,7 +57,6 @@ function normalizeHotel(hotel: any, rates?: any) {
     let currency = 'USD';
     let currentBookingUrl = null;
 
-    // Extract price from offerRetailRate or fallback to rates array
     if (room.offerRetailRate?.amount) {
       priceAmount = room.offerRetailRate.amount;
       currency = room.offerRetailRate.currency || 'USD';
@@ -76,42 +73,34 @@ function normalizeHotel(hotel: any, rates?: any) {
       currentBookingUrl = firstRate.booking_url || firstRate.deeplink || firstRate.paymentUrl || firstRate.bookingUrl;
     }
 
-    // Calculate nightly price (LiteAPI usually returns total for stay)
     const nights = rates?.nights || 1;
     const nightlyPrice = priceAmount > 0 ? priceAmount / nights : 0;
 
     if (nightlyPrice > 0 && nightlyPrice < lowestPrice) {
       lowestPrice = nightlyPrice;
-      if (currentBookingUrl) {
-        bestBookingUrl = currentBookingUrl;
-      }
+      if (currentBookingUrl) bestBookingUrl = currentBookingUrl;
     }
 
-    // Add to normalized rooms list
     normalizedRooms.push({
       id: room.roomTypeId || room.roomId || room.id,
       name: room.name,
       price: nightlyPrice,
-      currency: currency,
+      currency,
       cancellation: !!room.rates?.[0]?.cancellationPolicies,
       board: room.rates?.[0]?.boardType || 'Room Only',
       bookingUrl: currentBookingUrl
     });
   });
 
-  // Fallback if no rates found
   if (lowestPrice === Infinity) {
     lowestPrice = hotel.pricePerNight || 0;
   }
 
-  // 3. PRIORITY URL MAPPING (Crucial for live bookings)
-  // If we didn't find a specific rate URL, fall back to hotel-level URLs
-  const bookingUrl = 
-    bestBookingUrl ||
-    hotel.booking_url || 
-    hotel.deeplink || 
-    hotel.partner_booking_url || 
-    null;
+  const bookingUrl = bestBookingUrl || hotel.booking_url || hotel.deeplink || hotel.partner_booking_url || null;
+
+  // Helper normalize function (used for matching)
+  const normalize = (str: string) => 
+    (str || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/\s+/g, '');
 
   return {
     id: hotel.id || hotel.hotelId,
@@ -120,49 +109,22 @@ function normalizeHotel(hotel: any, rates?: any) {
     location: [hotel.city, hotel.country].filter(Boolean).join(', ') || hotel.address || 'Unknown Location',
     city: hotel.city,
     country: hotel.country,
-    price: lowestPrice, // Now strictly the cheapest available rate
+    price: lowestPrice,
     currency: "USD",
-    bookingUrl, 
+    bookingUrl,
     rating: hotel.starRating || hotel.rating || 4.5,
     reviews: hotel.reviewsCount || Math.floor(Math.random() * 500) + 50,
-    image: (() => {
-      // Priority order for main image
-      if (hotel.main_photo) return hotel.main_photo;
-      if (hotel.mainPhoto) return hotel.mainPhoto;
-      if (hotel.hotelImages?.[0]?.url) return hotel.hotelImages[0].url;
-      if (hotel.images?.[0]?.url) return hotel.images[0].url;
-      if (typeof hotel.images?.[0] === 'string') return hotel.images[0];
-      return '/placeholder.svg';
-    })(),
-    images: (() => {
-      // Extract all image URLs from hotelImages array
-      if (hotel.hotelImages && Array.isArray(hotel.hotelImages)) {
-        return hotel.hotelImages.map(img => img.urlHd || img.url).filter(Boolean);
-      }
-      // Fallback to images array if it exists
-      if (hotel.images && Array.isArray(hotel.images)) {
-        return hotel.images.map(img => {
-          if (typeof img === 'string') return img;
-          if (img?.url) return img.url;
-          return null;
-        }).filter(Boolean);
-      }
-      // Last resort fallback
-      return [hotel.main_photo || hotel.mainPhoto].filter(Boolean);
-    })(),
+    image: hotel.main_photo || hotel.mainPhoto || hotel.hotelImages?.[0]?.url || hotel.images?.[0]?.url || hotel.images?.[0] || '/placeholder.svg',
+    images: hotel.hotelImages?.map((img: any) => img.urlHd || img.url).filter(Boolean) ||
+            hotel.images?.map((img: any) => (typeof img === 'string' ? img : img?.url)).filter(Boolean) ||
+            [hotel.main_photo || hotel.mainPhoto].filter(Boolean),
     description: hotel.description || `Experience exceptional hospitality at ${hotel.name || 'this hotel'}.`,
     amenities: (() => {
       const facilities = hotel.facilities || hotel.amenities || [];
-      
-      const normalized = facilities.map(item => {
-        if (typeof item === 'string') return item;
-        if (item && typeof item === 'object' && item.name) return item.name;
-        return null;
-      }).filter(Boolean);
-      
-      return normalized.slice(0, 8).length > 0 
-        ? normalized.slice(0, 8) 
-        : ['Wifi', 'Restaurant', 'Concierge'];
+      const normalized = facilities.map((item: any) => 
+        typeof item === 'string' ? item : item?.name
+      ).filter(Boolean);
+      return normalized.slice(0, 8).length > 0 ? normalized.slice(0, 8) : ['Wifi', 'Restaurant', 'Concierge'];
     })(),
     sqft: hotel.roomSize || Math.floor(Math.random() * 500) + 400,
     beds: hotel.bedrooms || 1,
@@ -171,194 +133,158 @@ function normalizeHotel(hotel: any, rates?: any) {
     latitude: hotel.latitude,
     longitude: hotel.longitude,
     rawData: { hotel, rates },
-    rooms: normalizedRooms, // Expose full room list for white-label UI
-roomTypes: (() => {
-    // Extract static room data with photos from rawData
-    const staticRooms = hotel.rooms || [];
-    const staticRoomMap = new Map();
+    rooms: normalizedRooms,
 
-    staticRooms.forEach(room => {
-      const roomImages = room.photos && Array.isArray(room.photos)
-        ? room.photos.map(photo => photo.hd_url || photo.url).filter(Boolean)
-        : [];
+    roomTypes: (() => {
+      // Build static room map
+      const staticRooms = hotel.rooms || [];
+      const staticRoomMap = new Map();
 
-      const amenities = room.roomAmenities && Array.isArray(room.roomAmenities)
-        ? room.roomAmenities.map(a => {
-            // Handle both string and object formats
-            if (typeof a === 'string') return a;
-            if (a && typeof a === 'object' && a.name) return a.name;
-            return null;
-          }).filter(Boolean)
-        : [];
+      staticRooms.forEach((room: any) => {
+        const roomImages = room.photos?.map((photo: any) => photo.hd_url || photo.url).filter(Boolean) || [];
+        const amenities = room.roomAmenities?.map((a: any) => (typeof a === 'string' ? a : a?.name)).filter(Boolean) || [];
 
-
-      // Store by room ID
-      staticRoomMap.set(room.id, {
-        images: roomImages,
-        amenities: amenities,
-        description: room.description,
-        size: room.roomSizeSquare,
-        bedType: room.bedTypes?.[0]?.bedType,
-        roomName: room.roomName,
+        staticRoomMap.set(room.id, {
+          images: roomImages,
+          amenities,
+          description: room.description || '',
+          size: room.roomSizeSquare,
+          bedType: room.bedTypes?.[0]?.bedType,
+          roomName: room.roomName,
+        });
       });
-    });
 
-    // ✅ IMPROVED: Better name matching with aggressive trimming
-    const findStaticRoomByName = (rateName) => {
-      if (!rateName) return null;
+      // Matching helper
+      const findStaticRoomByName = (rateName: string) => {
+        if (!rateName) return null;
 
-      // ✅ AGGRESSIVE TRIM: Remove everything after "with", "-", "TEST", etc.
-      const trimmedName = rateName
-        .split(' with ')[0]
-        .split(' - ')[0]
-        .split(' TEST ')[0]
-        .split(' featuring ')[0]
-        .split(' ideal ')[0]
-        .trim();
+        const trimmedName = rateName
+          .split(' with ')[0]
+          .split(' - ')[0]
+          .split(' TEST ')[0]
+          .split(' featuring ')[0]
+          .split(' ideal ')[0]
+          .trim();
 
-      const normalize = (str) => str.toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-        .replace(/\s+/g, '');
+        const normalizedRateName = normalize(trimmedName);
 
-      const normalizedRateName = normalize(trimmedName);
-
-      // Try exact match first
-      for (const [id, data] of staticRoomMap.entries()) {
-        if (normalize(data.roomName) === normalizedRateName) {
-          console.log(`✅ Exact match: "${rateName}" → "${data.roomName}"`);
-          return { id, ...data };
-        }
-      }
-
-      // ✅ IMPROVED: Partial match with HIGHER threshold (70%)
-      let bestMatch = null;
-      let bestScore = 0;
-      for (const [id, data] of staticRoomMap.entries()) {
-        const normalizedStatic = normalize(data.roomName);
-        
-        // Calculate match score
-        const score = normalizedRateName.includes(normalizedStatic) 
-          ? normalizedStatic.length / normalizedRateName.length 
-          : 0;
-        
-        // Only accept matches above 70% confidence (increased from 60%)
-        if (score > bestScore && score > 0.7) {
-          bestScore = score;
-          bestMatch = { id, ...data };
-        }
-      }
-      
-      if (bestMatch) {
-        console.log(`✅ Partial match (${Math.round(bestScore * 100)}%): "${rateName}" → "${bestMatch.roomName}"`);
-      } else {
-        console.log(`⚠️ No match found for: "${rateName}"`);
-      }
-      
-      return bestMatch;
-    };
-
-    // ✅ NEW: Prepare hotel-level fallbacks
-    const fallbackImages = (() => {
-      // Get a subset of hotel images (3-5 random images)
-      const allImages = hotel.hotelImages?.map(img => img.urlHd || img.url).filter(Boolean) || 
-                        hotel.images || [];
-      if (allImages.length <= 5) return allImages;
-      
-      // Randomly select 5 images for variety
-      const shuffled = [...allImages].sort(() => 0.5 - Math.random());
-      return shuffled.slice(0, 5);
-    })();
-    
-const fallbackAmenities = (() => {
-  const facilities = hotel.facilities || hotel.amenities || [];
-  
-  // Normalize to strings only
-  const normalized = facilities.map(item => {
-    if (typeof item === 'string') return item;
-    if (item && typeof item === 'object' && item.name) return item.name;
-    return null;
-  }).filter(Boolean);
-  
-  return normalized.slice(0, 8).length > 0 
-    ? normalized.slice(0, 8) 
-    : ['Wifi', 'Restaurant', 'Concierge'];
-})();
-    const fallbackDescription = hotel.description || '';
-
-    // If we have live rates, merge with static room data
-    if (availableRooms && availableRooms.length > 0) {
-      return availableRooms.map(room => {
-        // Try multiple matching strategies
-        let staticData = staticRoomMap.get(room.roomTypeId || room.id);
-        
-        // If no match by ID, try matching by name
-        if (!staticData && room.name) {
-          const match = findStaticRoomByName(room.name);
-          if (match) {
-            staticData = match;
+        // Exact match
+        for (const [id, data] of staticRoomMap.entries()) {
+          if (normalize(data.roomName) === normalizedRateName) {
+            console.log(`Exact match: "${rateName}" → "${data.roomName}"`);
+            return { id, ...data };
           }
         }
-        
-        // ✅ IMPROVED: Always have fallback, never empty
-        const hasStaticData = staticData && Object.keys(staticData).length > 0;
 
-        // ✅ CRITICAL FIX: Enrich rates with offerId and context
-        const enrichedRates = (room.rates || []).map(rate => {
-          // ✅ IMPORTANT: offerId comes from the ROOM level, not rate level
-          const offerId = room.offerId || rate.offerId || `${room.roomTypeId || room.id}_${rate.rateId || Math.random()}`;
-          
+        // Partial match
+        let bestMatch: any = null;
+        let bestScore = 0;
+        for (const [id, data] of staticRoomMap.entries()) {
+          const normalizedStatic = normalize(data.roomName);
+          const score = normalizedRateName.includes(normalizedStatic)
+            ? normalizedStatic.length / normalizedRateName.length
+            : 0;
+          if (score > bestScore && score > 0.7) {
+            bestScore = score;
+            bestMatch = { id, ...data };
+          }
+        }
+
+        if (bestMatch) {
+          console.log(`Partial match (${Math.round(bestScore * 100)}%): "${rateName}" → "${bestMatch.roomName}"`);
+        } else {
+          console.log(`No match for: "${rateName}"`);
+        }
+
+        return bestMatch;
+      };
+
+      // Hotel-level fallbacks
+      const allHotelImages = hotel.hotelImages?.map((img: any) => img.urlHd || img.url).filter(Boolean) ||
+                            hotel.images || [];
+      const fallbackImages = allHotelImages.length > 5
+        ? [...allHotelImages].sort(() => 0.5 - Math.random()).slice(0, 5)
+        : allHotelImages;
+
+      const fallbackAmenities = (() => {
+        const facilities = hotel.facilities || hotel.amenities || [];
+        return facilities.map((item: any) =>
+          typeof item === 'string' ? item : item?.name
+        ).filter(Boolean).slice(0, 8) || ['Wifi', 'Restaurant', 'Concierge'];
+      })();
+
+      const fallbackDescription = hotel.description || '';
+
+      // === MAIN LOGIC: Prefer static rooms as base ===
+      let finalRoomList: any[] = [];
+
+      if (staticRooms.length > 0) {
+        finalRoomList = staticRooms.map((staticRoom: any) => {
+          const staticData = staticRoomMap.get(staticRoom.id) || {};
+
+          // Try to find matching live room
+          let liveRoom = null;
+          if (availableRooms?.length > 0) {
+            liveRoom = availableRooms.find((r: any) =>
+              r.roomTypeId === staticRoom.id ||
+              findStaticRoomByName(r.name)?.id === staticRoom.id ||
+              normalize(r.name) === normalize(staticRoom.roomName)
+            );
+          }
+
+          // Build rates if live match found
+          let enrichedRates: any[] = [];
+          if (liveRoom) {
+            enrichedRates = (liveRoom.rates || []).map((rate: any) => ({
+              ...rate,
+              offerId: liveRoom.offerId || rate.offerId,
+              roomTypeId: liveRoom.roomTypeId || staticRoom.id,
+              roomName: liveRoom.name || staticRoom.roomName || rate.name || 'Room',
+              mappedRoomId: liveRoom.mappedRoomId || staticRoom.id,
+            }));
+          }
+
           return {
-            ...rate,
-            offerId: offerId,
-            roomTypeId: room.roomTypeId || room.id,
-            roomName: room.name || staticData?.roomName || rate.name || 'Room',  // Multiple fallbacks
-            mappedRoomId: room.mappedRoomId || room.roomTypeId || staticData?.id || room.id,
+            id: staticRoom.id,
+            roomTypeId: staticRoom.id,
+            name: staticRoom.roomName || 'Unnamed Room',
+            description: staticData.description || fallbackDescription,
+            images: staticData.images?.length > 0 ? staticData.images : fallbackImages,
+            amenities: staticData.amenities?.length > 0 ? staticData.amenities : fallbackAmenities,
+            maxOccupancy: staticRoom.maxOccupancy || staticRoom.maxAdults || 2,
+            size: staticData.size || null,
+            bedType: staticData.bedType || null,
+            rates: enrichedRates,  // empty if no live rates match
           };
         });
-        
-        return {
-          ...room,
-          // ✅ FIXED: Always provide images (prefer static, fallback to hotel subset)
-          images: (hasStaticData && staticData.images?.length > 0) 
-            ? staticData.images 
-            : fallbackImages,
-          
-          // ✅ FIXED: Always provide amenities
-          amenities: (hasStaticData && staticData.amenities?.length > 0) 
-            ? staticData.amenities 
-            : (room.amenities || fallbackAmenities),
-          
-          // ✅ FIXED: Always provide description
-          description: (hasStaticData && staticData.description) 
-            ? staticData.description 
-            : (room.description || fallbackDescription),
-          
-          maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
-          size: staticData?.size || room.roomSizeSquare || null,
-          bedType: staticData?.bedType || room.bedTypes?.[0]?.bedType || null,
-          rates: enrichedRates,
-        };
-      });
-    }
+      } 
+      // If no static rooms at all (very rare), fall back to live rooms
+      else if (availableRooms?.length > 0) {
+        finalRoomList = availableRooms.map((room: any, idx: number) => {
+          const enrichedRates = (room.rates || []).map((rate: any) => ({
+            ...rate,
+            offerId: room.offerId || rate.offerId,
+            roomTypeId: room.roomTypeId || room.id,
+            roomName: room.name || rate.name || 'Room',
+            mappedRoomId: room.mappedRoomId || room.id,
+          }));
 
-    // Fallback: Return static rooms with empty rates (when no dates selected)
-    return staticRooms.map(room => {
-      const staticData = staticRoomMap.get(room.id) || {};
+          return {
+            ...room,
+            images: fallbackImages,
+            amenities: fallbackAmenities,
+            description: room.description || fallbackDescription,
+            maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
+            size: room.roomSizeSquare || null,
+            bedType: room.bedTypes?.[0]?.bedType || null,
+            rates: enrichedRates,
+          };
+        });
+      }
 
-      return {
-        id: room.id,
-        roomTypeId: room.id,
-        name: room.roomName,
-        description: staticData.description || '',
-        images: staticData.images || [],
-        amenities: staticData.amenities || [],
-        maxOccupancy: room.maxOccupancy || room.maxAdults || 2,
-        size: staticData.size || null,
-        bedType: staticData.bedType || null,
-        rates: [],
-      };
-    });
-})(),
+      return finalRoomList;
+    })(),
+
     priceSource: hasLiveRates ? "liteapi-live" : "static",
   };
 }
