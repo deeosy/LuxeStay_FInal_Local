@@ -151,7 +151,19 @@ function normalizeHotel(hotel: any, rates?: any) {
       return [hotel.main_photo || hotel.mainPhoto].filter(Boolean);
     })(),
     description: hotel.description || `Experience exceptional hospitality at ${hotel.name || 'this hotel'}.`,
-    amenities: hotel.facilities?.slice(0, 8) || hotel.amenities || ['Wifi', 'Restaurant', 'Concierge'],
+    amenities: (() => {
+      const facilities = hotel.facilities || hotel.amenities || [];
+      
+      const normalized = facilities.map(item => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && item.name) return item.name;
+        return null;
+      }).filter(Boolean);
+      
+      return normalized.slice(0, 8).length > 0 
+        ? normalized.slice(0, 8) 
+        : ['Wifi', 'Restaurant', 'Concierge'];
+    })(),
     sqft: hotel.roomSize || Math.floor(Math.random() * 500) + 400,
     beds: hotel.bedrooms || 1,
     guests: hotel.maxOccupancy || 2,
@@ -171,8 +183,14 @@ roomTypes: (() => {
         : [];
 
       const amenities = room.roomAmenities && Array.isArray(room.roomAmenities)
-        ? room.roomAmenities.map(a => a.name).filter(Boolean)
+        ? room.roomAmenities.map(a => {
+            // Handle both string and object formats
+            if (typeof a === 'string') return a;
+            if (a && typeof a === 'object' && a.name) return a.name;
+            return null;
+          }).filter(Boolean)
         : [];
+
 
       // Store by room ID
       staticRoomMap.set(room.id, {
@@ -251,7 +269,20 @@ roomTypes: (() => {
       return shuffled.slice(0, 5);
     })();
     
-    const fallbackAmenities = hotel.facilities?.slice(0, 8) || hotel.amenities || [];
+const fallbackAmenities = (() => {
+  const facilities = hotel.facilities || hotel.amenities || [];
+  
+  // Normalize to strings only
+  const normalized = facilities.map(item => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object' && item.name) return item.name;
+    return null;
+  }).filter(Boolean);
+  
+  return normalized.slice(0, 8).length > 0 
+    ? normalized.slice(0, 8) 
+    : ['Wifi', 'Restaurant', 'Concierge'];
+})();
     const fallbackDescription = hotel.description || '';
 
     // If we have live rates, merge with static room data
