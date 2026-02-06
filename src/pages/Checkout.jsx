@@ -121,7 +121,68 @@ const Checkout = () => {
   const [paymentStep, setPaymentStep] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
 
+  // Initialize Payment SDK when step is active
+  useEffect(() => {
+    if (paymentStep && prebookId && secretKey) {
+      const scriptId = 'liteapi-payment-sdk';
+
+      // Load script only once
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://payment-wrapper.liteapi.travel/dist/liteAPIPayment.js';
+        script.async = true;
+        script.onload = () => {
+          console.log('✅ Payment SDK script loaded');
+          initPaymentSdk();
+        };
+        script.onerror = () => {
+          console.error('❌ Failed to load Payment SDK script');
+          toast.error('Failed to load payment system. Please refresh the page.');
+        };
+        document.body.appendChild(script);
+      } else {
+        // Script already loaded, just initialize SDK
+        initPaymentSdk();
+      }
+    }
+  }, [paymentStep, prebookId, secretKey]);
+
+  const initPaymentSdk = () => {
+    console.log('Attempting to initialize LiteAPI Payment SDK');
+    console.log('  → publicKey used:', "sandbox");
+    console.log('  → secretKey present:', !!secretKey);
+    console.log('  → transactionId:', transactionId);
+    console.log('  → prebookId:', prebookId);
+    console.log('  → returnUrl:', returnUrl);
+
+    if (!window.LiteAPIPayment) {
+      console.error('LiteAPIPayment global not found - script did not load correctly');
+      return;
+    }
+
+    if (window.LiteAPIPayment) {
+      const returnUrl = `${window.location.origin}/booking/confirmation?prebookId=${prebookId}&transactionId=${transactionId}`;
+      
+      try {
+        new window.LiteAPIPayment({
+          publicKey: "sandbox", // As per instructions
+          secretKey: secretKey,
+          returnUrl: returnUrl,
+          targetElement: "#payment",
+        });
+        console.log('LiteAPIPayment initialized successfully');
+      } catch (err) {
+        console.error("Payment SDK Init Error:", err);
+        toast.error("Failed to load payment form");
+      }
+    } else {
+      setTimeout(initPaymentSdk, 500); // Retry if script not ready after 500ms
+    }
+  };
+
   // Show loading for LiteAPI hotels
+
   if (isLiteApiHotel && liteApiLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -158,39 +219,165 @@ const Checkout = () => {
     setFormData({ ...formData, [name]: value });
   };
 
-  const handlePrebook = async (e) => {
-    e.preventDefault();
-    if (!selectedOffer?.offerId) {
-      toast.error('No room offer selected. Please choose a room on the hotel page.');
-      navigate(-1);
-      return;
-    }
-    setPrebookLoading(true);
-    try {
-      const params = new URLSearchParams({
-        action: 'prebook',
-        offerId: selectedOffer.offerId,
-      });
-      const res = await fetch(`${import.meta.env.VITE_LITEAPI_BASE}?${params.toString()}`);
-      const data = await res.json();
-      if (!res.ok || !data.prebookId || !data.transactionId || !data.secretKey) {
-        throw new Error(data?.error || 'Prebook failed');
-      }
-      setPrebookResult({
-        prebookId: data.prebookId,
-        transactionId: data.transactionId,
-        secretKey: data.secretKey,
-      });
-      toast.success('Offer reserved. Proceed to payment.');
+  // Check if we already have a valid prebook for this offer
+  // If prebook exists and payment step is not active, user might be returning
+  useEffect(() => {
+    if (prebookId && transactionId && secretKey && !paymentStep && selectedOffer) {
+      // If we have valid prebook data, advance to payment step automatically
+      // But only if we are on the checkout page (which we are)
       setPaymentStep(true);
-    } catch (err) {
-      toast.error(err.message || 'Unable to reserve the offer. It may have expired.');
-    } finally {
-      setPrebookLoading(false);
     }
-  };
+  }, [prebookId, transactionId, secretKey, paymentStep, selectedOffer]);
 
-  const handleConfirmBooking = async () => {
+ const handlePrebook = async (e) => {
+  e.preventDefault();
+  
+  console.log('🎯 PREBOOK: Starting prebook process...');
+  
+  // Check if we already have a valid prebook for this offer
+  if (prebookId && transactionId && secretKey) {
+    console.log('✅ PREBOOK: Already have valid prebook data, advancing to payment');
+    console.log('  prebookId:', prebookId);
+    console.log('  transactionId:', transactionId);
+    setPaymentStep(true);
+    return;
+  }
+
+  if (!selectedOffer?.offerId) {
+    console.error('❌ PREBOOK: No offer selected');
+    console.error('  selectedOffer:', selectedOffer);
+    toast.error('No room offer selected. Please choose a room on the hotel page.');
+    navigate(-1);
+    return;
+  }
+  
+  console.log('📋 PREBOOK: Offer Details');
+  console.log('  offerId:', selectedOffer.offerId);
+  console.log('  roomName:', selectedOffer.roomName);
+  console.log('  price:', selectedOffer.price);
+  console.log('  boardName:', selectedOffer.boardName);
+  console.log('  refundableTag:', selectedOffer.refundableTag);
+  console.log('  hotelId:', selectedOffer.hotelId);
+  console.log('  Full selectedOffer:', JSON.stringify(selectedOffer, null, 2));
+  
+  setPrebookLoading(true);
+  
+  try {
+    const params = new URLSearchParams({ action: 'prebook' });
+    const apiUrl = `${import.meta.env.VITE_LITEAPI_BASE}?${params.toString()}`;
+
+    const payload = {
+      offerId: selectedOffer.offerId,
+      usePaymentSdk: true,
+    };
+
+    console.log('🚀 PREBOOK: Sending request');
+    console.log('  API URL:', apiUrl);
+    console.log('  Payload:', JSON.stringify(payload, null, 2));
+    console.log('  Method: POST');
+
+    const startTime = Date.now();
+    
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    
+    const duration = Date.now() - startTime;
+    console.log(`⏱️  PREBOOK: Request took ${duration}ms`);
+    console.log('📡 PREBOOK: Response status:', res.status);
+    console.log('📡 PREBOOK: Response headers:', Object.fromEntries(res.headers.entries()));
+    
+    const data = await res.json();
+    console.log('📡 PREBOOK: Response data:', JSON.stringify(data, null, 2));
+    
+    // Check for error in response
+    if (!res.ok) {
+      console.error('❌ PREBOOK: Request failed');
+      console.error('  Status:', res.status);
+      console.error('  Error:', data?.error);
+      console.error('  Details:', data?.details);
+      
+      // Specific error handling
+      if (res.status === 400) {
+        console.error('⚠️  PREBOOK: 400 Bad Request');
+        console.error('  Possible causes:');
+        console.error('    1. Invalid or expired offerId');
+        console.error('    2. Offer was already prebooked');
+        console.error('    3. Hotel availability changed');
+        console.error('    4. Missing required fields');
+        console.error('  Suggestion: Try selecting the room again to get a fresh offerId');
+      } else if (res.status === 401) {
+        console.error('⚠️  PREBOOK: 401 Unauthorized - API key issue');
+      } else if (res.status === 500) {
+        console.error('⚠️  PREBOOK: 500 Server Error - LiteAPI issue');
+      }
+      
+      throw new Error(data?.error || data?.message || `Prebook failed with status ${res.status}`);
+    }
+    
+    // Validate response data
+    console.log('🔍 PREBOOK: Validating response fields');
+    console.log('  prebookId:', data.prebookId ? '✅ Present' : '❌ Missing');
+    console.log('  transactionId:', data.transactionId ? '✅ Present' : '❌ Missing');
+    console.log('  secretKey:', data.secretKey ? '✅ Present' : '❌ Missing');
+    console.log('  pricing:', data.pricing ? '✅ Present' : 'ℹ️  Optional');
+    console.log('  cancellation:', data.cancellation ? '✅ Present' : 'ℹ️  Optional');
+    
+    if (!data.prebookId || !data.transactionId || !data.secretKey) {
+      console.error('❌ PREBOOK: Missing critical fields in response');
+      console.error('  Expected: prebookId, transactionId, secretKey');
+      console.error('  Received:', {
+        prebookId: data.prebookId ? 'Present' : 'MISSING',
+        transactionId: data.transactionId ? 'Present' : 'MISSING',
+        secretKey: data.secretKey ? 'Present' : 'MISSING'
+      });
+      throw new Error('Incomplete prebook response from server');
+    }
+
+    console.log('✅ PREBOOK: Success! Saving prebook data...');
+    
+    setPrebookResult({
+      prebookId: data.prebookId,
+      transactionId: data.transactionId,
+      secretKey: data.secretKey,
+    });
+    
+    console.log('✅ PREBOOK: Prebook data saved to store');
+    console.log('  prebookId:', data.prebookId);
+    console.log('  transactionId:', data.transactionId);
+    
+    toast.success('Offer reserved. Proceed to payment.');
+    setPaymentStep(true);
+    
+    console.log('✅ PREBOOK: Advanced to payment step');
+    
+  } catch (err) {
+    console.error('❌ PREBOOK: Error in handlePrebook');
+    console.error('  Error type:', err.constructor.name);
+    console.error('  Error message:', err.message);
+    console.error('  Error stack:', err.stack);
+    console.error('  Full error:', err);
+    
+    // User-friendly error message
+    let userMessage = 'Unable to reserve the offer.';
+    
+    if (err.message?.includes('400') || err.message?.includes('expired')) {
+      userMessage = 'This offer has expired. Please select the room again to get updated pricing.';
+      console.log('💡 PREBOOK: Suggesting user to reselect room for fresh offerId');
+    } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
+      userMessage = 'Network error. Please check your connection and try again.';
+    }
+    
+    toast.error(userMessage);
+  } finally {
+    setPrebookLoading(false);
+    console.log('🏁 PREBOOK: Process completed (loading state reset)');
+  }
+};
+
+  const handleBook = async () => {
     if (!prebookId || !transactionId) {
       toast.error('Payment not initialized. Please prebook first.');
       return;
@@ -202,37 +389,54 @@ const Checkout = () => {
     setBookingLoading(true);
     try {
       const params = new URLSearchParams({
-        action: 'confirm',
-        prebookId,
-        transactionId,
+        action: 'book', // Updated to 'book' per instructions
       });
+      
+      const payload = {
+        prebookId,
+        holder: {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+        },
+        payment: {
+          method: "TRANSACTION_ID",
+          transactionId: transactionId
+        },
+        guests: [
+          {
+            occupancyNumber: 1,
+            firstName: formData.firstName, // Assuming primary guest is holder for now
+            lastName: formData.lastName,
+            email: formData.email
+          }
+        ]
+      };
+
       const res = await fetch(`${import.meta.env.VITE_LITEAPI_BASE}?${params.toString()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          guest: {
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            phone: formData.phone,
-          }
-        }),
+        body: JSON.stringify(payload),
       });
+      
       const data = await res.json();
       if (!res.ok || !data.bookingId) {
         throw new Error(data?.error || 'Booking failed');
       }
       setBookingSummary({
         bookingId: data.bookingId,
-        confirmationCode: data.confirmationCode,
+        confirmationCode: data.confirmationCode || data.bookingId,
         hotel: selectedHotel,
         checkIn,
         checkOut,
         price: { total: getPriceBreakdown()?.total || 0 },
       });
+      // Clear prebook data after successful booking
+      // resetPrebook(); // Optional: keep for confirmation page if needed
       navigate('/booking/confirmation');
     } catch (err) {
-      toast.error(err.message || 'Payment or booking failed.');
+      toast.error(err.message || 'Booking failed.');
     } finally {
       setBookingLoading(false);
     }
@@ -368,74 +572,103 @@ const Checkout = () => {
                       Secure Sandbox
                     </div>
                   </div>
-                  {!paymentStep ? (
-                    <>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Reserve your selected offer and proceed to payment.
-                      </p>
-                      {/* Show selected offer details */}
-                      {selectedOffer && (
-                        <div className="mb-4 p-3 bg-secondary/30 rounded-lg">
-                          <p className="text-xs font-medium mb-1">Selected Room:</p>
-                          <p className="text-sm">{selectedOffer.roomName}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {selectedOffer.boardName} • {selectedOffer.refundableTag === 'RFN' ? 'Free Cancellation' : 'Non-refundable'}
-                          </p>
-                          <p className="text-sm font-semibold mt-2">
-                            ${Math.ceil(selectedOffer.price.amount).toLocaleString()} total
-                          </p>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handlePrebook}
-                        disabled={prebookLoading || !selectedOffer?.offerId}
-                        className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {prebookLoading ? 'Reserving...' : 'Reserve & Continue'}
-                      </button>
-                      {!selectedOffer?.offerId && (
-                        <p className="text-xs text-red-600 mt-2">
-                          Please select a specific room offer on the hotel page first.
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div className="bg-secondary/50 rounded-lg p-4">
-                        <div className="flex items-center gap-2 text-sm mb-2">
-                          <CreditCard className="w-4 h-4 text-accent" />
-                          <span className="font-medium">Sandbox Payment</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-3">
-                          Use test card 4242 4242 4242 4242, any future date and any CVC.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <input className="border border-border rounded-md px-3 py-2 text-sm" placeholder="4242 4242 4242 4242" />
-                          <input className="border border-border rounded-md px-3 py-2 text-sm" placeholder="MM/YY" />
-                          <input className="border border-border rounded-md px-3 py-2 text-sm" placeholder="CVC" />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleConfirmBooking}
-                          disabled={bookingLoading}
-                          className="mt-4 w-full btn-accent disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                          {bookingLoading ? (
-                            <>
-                              <div className="w-5 h-5 border-2 border-accent-foreground/30 border-t-accent-foreground rounded-full animate-spin" />
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <ExternalLink className="w-5 h-5" />
-                              Pay & Confirm
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </>
-                  )}
+{!paymentStep ? (
+  <>
+    <p className="text-sm text-muted-foreground mb-4">
+      Reserve your selected offer and proceed to payment.
+    </p>
+    {/* Show selected offer details */}
+    {selectedOffer && (
+      <div className="mb-4 p-3 bg-secondary/30 rounded-lg">
+        <p className="text-xs font-medium mb-1">Selected Room:</p>
+        <p className="text-sm">{selectedOffer.roomName}</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {selectedOffer.boardName} • {selectedOffer.refundableTag === 'RFN' ? 'Free Cancellation' : 'Non-refundable'}
+        </p>
+        <p className="text-sm font-semibold mt-2">
+          ${Math.ceil(selectedOffer.price.amount).toLocaleString()} total
+        </p>
+      </div>
+    )}
+    <button
+      type="button"
+      onClick={handlePrebook}
+      disabled={prebookLoading || !selectedOffer?.offerId}
+      className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+    >
+      {prebookLoading ? (
+        <>
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Reserving...
+        </>
+      ) : (
+        'Reserve & Continue'
+      )}
+    </button>
+    {!selectedOffer?.offerId && (
+      <p className="text-xs text-red-600 mt-2">
+        ⚠️ No room selected. Please go back and select a room first.
+      </p>
+    )}
+  </>
+) : (
+  <>
+    <div className="bg-secondary/50 rounded-lg p-4">
+      <div className="flex items-center gap-2 text-sm mb-4">
+        <CreditCard className="w-4 h-4 text-accent" />
+        <span className="font-medium">Secure Payment</span>
+      </div>
+      
+      {/* ✅ NEW: Loading state while SDK initializes */}
+      {!window.LiteAPIPayment && (
+        <div className="text-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-accent mb-3" />
+          <p className="text-sm text-muted-foreground">Loading secure payment form...</p>
+          <p className="text-xs text-muted-foreground mt-1">This may take a few seconds</p>
+        </div>
+      )}
+      
+      {/* LiteAPI Payment Container - always rendered for SDK to find it */}
+      <div 
+        id="payment" 
+        className={`min-h-[300px] bg-white rounded-md p-4 border border-border ${!window.LiteAPIPayment ? 'hidden' : ''}`}
+      ></div>
+      
+      {/* ✅ IMPROVED: Only show button after SDK loads */}
+      {window.LiteAPIPayment && (
+        <button
+          type="button"
+          onClick={handleBook}
+          disabled={bookingLoading}
+          className="mt-6 w-full btn-accent disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          {bookingLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            <>
+              <ExternalLink className="w-5 h-5" />
+              Confirm & Pay
+            </>
+          )}
+        </button>
+      )}
+      
+      {/* ✅ NEW: Helpful note about test cards */}
+      {window.LiteAPIPayment && (
+        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-xs font-medium text-blue-900 mb-1">💳 Test Card Information</p>
+          <p className="text-xs text-blue-800">
+            Card: <code className="bg-blue-100 px-1 rounded">4242 4242 4242 4242</code><br/>
+            Expiry: Any future date • CVC: Any 3 digits
+          </p>
+        </div>
+      )}
+    </div>
+  </>
+)}
                 </div>
 
                 {/* Special Requests */}

@@ -34,7 +34,9 @@ export const handler: Handler = async (event) => {
     if (!supabaseUrl || !serviceRoleKey) {
       console.error("Supabase environment variables are not configured");
 
-      const liteapiKey =  process.env.LITE_API_KEY_PROD ||  process.env.VITE_LITEAPI_KEY ||  process.env.LITEAPI_KEY_SANDBOX;
+      const liteapiKey =  
+        // process.env.LITE_API_KEY_PROD ||   // change to prod key when ready
+        process.env.LITE_API_KEY;
       
       if (liteapiKey) {
         const directUrl = `https://api.liteapi.travel/v3/hotels/${hotelId}/book?apiKey=${liteapiKey}`;

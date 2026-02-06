@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 // Utility to calculate nights between two dates
 const calculateNights = (checkIn, checkOut) => {
@@ -39,157 +40,172 @@ const calculatePriceBreakdown = (hotel, nights, bookingSummary = null) => {
   };
 };
 
-const useBookingStore = create((set, get) => ({
-  // ===== SEARCH PARAMETERS =====
-  destination: '',
-  checkIn: '',
-  checkOut: '',
-  guests: 2,
-  rooms: 1,
+const useBookingStore = create(
+  persist(
+    (set, get) => ({
+      // ===== SEARCH PARAMETERS =====
+      destination: '',
+      checkIn: '',
+      checkOut: '',
+      guests: 2,
+      rooms: 1,
 
-  // ===== SELECTED HOTEL & ROOM =====
-  selectedHotel: null,
-  selectedRoom: null,
-  selectedOffer: null, // Shape: { offerId, hotelId, roomName, price, ... }
+      // ===== SELECTED HOTEL & ROOM =====
+      selectedHotel: null,
+      selectedRoom: null,
+      selectedOffer: null, // Shape: { offerId, hotelId, roomName, price, ... }
 
-  // EXPECTED ROOM PRICE FR0M AUTO-SELECTION
-  expectedCheapestPrice: null,           // ← add this
+      // EXPECTED ROOM PRICE FR0M AUTO-SELECTION
+      expectedCheapestPrice: null,
 
-  setExpectedCheapestPrice: (price) =>   // ← add this
-    set({ expectedCheapestPrice: price }),
+      setExpectedCheapestPrice: (price) =>
+        set({ expectedCheapestPrice: price }),
 
-  // Optional: clear it when needed
-  clearExpectedCheapestPrice: () =>
-    set({ expectedCheapestPrice: null }),
+      // Optional: clear it when needed
+      clearExpectedCheapestPrice: () =>
+        set({ expectedCheapestPrice: null }),
 
-  // ===== DERIVED: PRICE BREAKDOWN =====
-  getPriceBreakdown: () => {
-    const state = get();
-    const nights = calculateNights(state.checkIn, state.checkOut);
-    
-    // Prefer selectedOffer price if available
-    if (state.selectedOffer?.price?.amount) {
-      const total = state.selectedOffer.price.amount;
-      // If the offer price is total for the stay, use it directly.
-      // LiteAPI usually returns total price in retailRate.total
-      // If it's per night, we multiply.
-      // We'll assume the stored price is the TOTAL for the stay as per LiteAPI typical response for "retailRate.total"
-      // But we need to be careful. Let's assume the component calculates the correct total before storing.
+      // ===== DERIVED: PRICE BREAKDOWN =====
+      getPriceBreakdown: () => {
+        const state = get();
+        const nights = calculateNights(state.checkIn, state.checkOut);
+        
+        // Prefer selectedOffer price if available
+        if (state.selectedOffer?.price?.amount) {
+          const total = state.selectedOffer.price.amount;
+          // If the offer price is total for the stay, use it directly.
+          return {
+            pricePerNight: total / nights,
+            nights,
+            subtotal: total,
+            serviceFee: 0, 
+            total: total,
+          };
+        }
+
+        return calculatePriceBreakdown(
+          state.selectedHotel, 
+          nights, 
+          state.bookingSummary
+        );
+      },
+
+      // Computed nights
+      getNights: () => {
+        const state = get();
+        return calculateNights(state.checkIn, state.checkOut);
+      },
+
+      // ===== SEARCH ACTIONS =====
+      setDestination: (destination) => set({ destination }),
       
-      return {
-        pricePerNight: total / nights,
-        nights,
-        subtotal: total,
-        serviceFee: 0, // usually included in total or 0
-        total: total,
-      };
+      setCheckIn: (checkIn) => set({ checkIn }),
+      
+      setCheckOut: (checkOut) => set({ checkOut }),
+      
+      setGuests: (guests) => set({ guests }),
+      
+      setRooms: (rooms) => set({ rooms }),
+
+      // Set multiple search params at once
+      setSearchParams: (params) => set((state) => ({
+        ...state,
+        ...params,
+      })),
+
+      // Reset search parameters only
+      resetSearch: () => set({
+        destination: '',
+        checkIn: '',
+        checkOut: '',
+        guests: 2,
+        rooms: 1,
+      }),
+
+      // ===== HOTEL SELECTION ACTIONS =====
+      setSelectedHotel: (hotel) => set({ selectedHotel: hotel }),
+      
+      clearSelectedHotel: () => set({ selectedHotel: null, selectedRoom: null }),
+
+      // ===== ROOM SELECTION ACTIONS =====
+      setSelectedRoom: (room) => set({ selectedRoom: room }),
+      setSelectedOffer: (offer) => set({ selectedOffer: offer }),
+      
+      clearSelectedRoom: () => set({ selectedRoom: null }),
+      clearSelectedOffer: () => set({ selectedOffer: null }),
+
+      // ===== BOOKING ACTIONS =====
+      // Prepare booking with all necessary data
+      prepareBooking: (hotel) => {
+        const state = get();
+        set({ 
+          selectedHotel: hotel,
+          // Preserve current search dates/guests
+        });
+      },
+
+      // Clear entire booking state
+      clearBooking: () => set({
+        selectedHotel: null,
+        selectedRoom: null,
+        selectedOffer: null,
+        prebookId: null,
+        transactionId: null,
+        secretKey: null,
+        bookingSummary: null,
+      }),
+
+      // Reset everything
+      resetAll: () => set({
+        destination: '',
+        checkIn: '',
+        checkOut: '',
+        guests: 2,
+        rooms: 1,
+        selectedHotel: null,
+        selectedRoom: null,
+        selectedOffer: null,
+        prebookId: null,
+        transactionId: null,
+        secretKey: null,
+        bookingSummary: null,
+      }),
+
+      // ===== LITEAPI FLOW STATE =====
+      prebookId: null,
+      transactionId: null,
+      secretKey: null,
+      bookingSummary: null,
+
+      setPrebookResult: ({ prebookId, transactionId, secretKey }) =>
+        set({ prebookId, transactionId, secretKey }),
+
+      setBookingSummary: (summary) => set({ bookingSummary: summary }),
+
+      resetPrebook: () => set({
+        prebookId: null,
+        transactionId: null,
+        secretKey: null,
+        bookingSummary: null,
+      }),
+    }),
+    {
+      name: 'booking-store',
+      storage: createJSONStorage(() => sessionStorage), // Use sessionStorage for booking flow
+      partialize: (state) => ({
+        // Persist only critical booking data
+        checkIn: state.checkIn,
+        checkOut: state.checkOut,
+        guests: state.guests,
+        rooms: state.rooms,
+        selectedHotel: state.selectedHotel,
+        selectedOffer: state.selectedOffer,
+        prebookId: state.prebookId,
+        transactionId: state.transactionId,
+        secretKey: state.secretKey,
+      }),
     }
-
-    return calculatePriceBreakdown(
-      state.selectedHotel, 
-      nights, 
-      state.bookingSummary
-    );
-  },
-
-  // Computed nights
-  getNights: () => {
-    const state = get();
-    return calculateNights(state.checkIn, state.checkOut);
-  },
-
-  // ===== SEARCH ACTIONS =====
-  setDestination: (destination) => set({ destination }),
-  
-  setCheckIn: (checkIn) => set({ checkIn }),
-  
-  setCheckOut: (checkOut) => set({ checkOut }),
-  
-  setGuests: (guests) => set({ guests }),
-  
-  setRooms: (rooms) => set({ rooms }),
-
-  // Set multiple search params at once
-  setSearchParams: (params) => set((state) => ({
-    ...state,
-    ...params,
-  })),
-
-  // Reset search parameters only
-  resetSearch: () => set({
-    destination: '',
-    checkIn: '',
-    checkOut: '',
-    guests: 2,
-    rooms: 1,
-  }),
-
-  // ===== HOTEL SELECTION ACTIONS =====
-  setSelectedHotel: (hotel) => set({ selectedHotel: hotel }),
-  
-  clearSelectedHotel: () => set({ selectedHotel: null, selectedRoom: null }),
-
-  // ===== ROOM SELECTION ACTIONS =====
-  setSelectedRoom: (room) => set({ selectedRoom: room }),
-  setSelectedOffer: (offer) => set({ selectedOffer: offer }),
-  
-  clearSelectedRoom: () => set({ selectedRoom: null }),
-  clearSelectedOffer: () => set({ selectedOffer: null }),
-
-  // ===== BOOKING ACTIONS =====
-  // Prepare booking with all necessary data
-  prepareBooking: (hotel) => {
-    const state = get();
-    set({ 
-      selectedHotel: hotel,
-      // Preserve current search dates/guests
-    });
-  },
-
-  // Clear entire booking state
-  clearBooking: () => set({
-    selectedHotel: null,
-    selectedRoom: null,
-    selectedOffer: null,
-    prebookId: null,
-    transactionId: null,
-    secretKey: null,
-    bookingSummary: null,
-  }),
-
-  // Reset everything
-  resetAll: () => set({
-    destination: '',
-    checkIn: '',
-    checkOut: '',
-    guests: 2,
-    rooms: 1,
-    selectedHotel: null,
-    selectedRoom: null,
-    selectedOffer: null,
-    prebookId: null,
-    transactionId: null,
-    secretKey: null,
-    bookingSummary: null,
-  }),
-
-  // ===== LITEAPI FLOW STATE =====
-  prebookId: null,
-  transactionId: null,
-  secretKey: null,
-  bookingSummary: null,
-
-  setPrebookResult: ({ prebookId, transactionId, secretKey }) =>
-    set({ prebookId, transactionId, secretKey }),
-
-  setBookingSummary: (summary) => set({ bookingSummary: summary }),
-
-  resetPrebook: () => set({
-    prebookId: null,
-    transactionId: null,
-    secretKey: null,
-    bookingSummary: null,
-  }),
-}));
+  )
+);
 
 export default useBookingStore;

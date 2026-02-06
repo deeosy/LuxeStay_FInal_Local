@@ -593,9 +593,10 @@ serve(async (req) => {
     });
   }
 
-  const apiKey = Deno.env.get('LITE_API_KEY_PROD');
+  const apiKey = Deno.env.get('LITE_API_KEY') 
+  // || Deno.env.get('LITE_API_KEY_PROD');   change this to prod key when ready
   if (!apiKey) {
-    console.error('LITE_API_KEY_PROD not configured');
+    console.error('LITE_API_KEY || LITE_API_KEY_PROD not configured');
     return new Response(
       JSON.stringify({ error: 'API key not configured', hotels: [] }),
       { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
@@ -788,43 +789,37 @@ serve(async (req) => {
       );
     } else if (action === 'book') {
       // ────────────────────────────────────────────────
-      // DEPRECATED: Use prebook → confirm flow instead
-      // This endpoint is kept for backward compatibility only
-      // Frontend should NEVER call this anymore
+      // Booking Step (Finalization)
+      // Endpoint: POST https://book.liteapi.travel/v3.0/rates/book
       // ────────────────────────────────────────────────
 
-      const hotelId = url.searchParams.get('hotelId');
-      const checkIn = url.searchParams.get('checkIn') || '';
-      const checkOut = url.searchParams.get('checkOut') || '';
-      const guests = parseInt(url.searchParams.get('guests') || '2');
-      const rooms = parseInt(url.searchParams.get('rooms') || '1');
-      const currency = url.searchParams.get('currency') || 'USD';
-
-      if (!hotelId || !checkIn || !checkOut) {
-        console.log('Book: Missing required parameters', { hotelId, checkIn, checkOut });
+      let body: any = {};
+      try {
+        body = await req.json();
+      } catch {
         return new Response(
-          JSON.stringify({ error: 'hotelId, checkIn and checkOut are required' }),
+          JSON.stringify({ error: 'Invalid JSON body' }),
           { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         );
       }
 
-      const bookUrl = `${LITEAPI_BASE_URL}/hotels/book`;
-      
-      // Distribute guests across rooms
-      const guestsPerRoom = Math.max(1, Math.floor(guests / rooms));
-      const remainder = guests % rooms;
-      
-      const occupancies = Array.from({ length: rooms }, (_, i) => ({
-        adults: i < remainder ? guestsPerRoom + 1 : guestsPerRoom,
-        children: []
-      }));
+      const { prebookId, holder, payment, guests } = body;
 
+      if (!prebookId || !holder || !payment || !guests) {
+        console.log('Book: Missing required fields', { prebookId, holder: !!holder, payment: !!payment, guests: !!guests });
+        return new Response(
+          JSON.stringify({ error: 'Missing required fields: prebookId, holder, payment, guests' }),
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const bookUrl = `https://book.liteapi.travel/v3.0/rates/book`;
+      
       const requestBody = {
-        hotelId,
-        checkin: checkIn,
-        checkout: checkOut,
-        currency,
-        occupancies,
+        prebookId,
+        holder,
+        payment,
+        guests
       };
 
       try {
@@ -839,97 +834,6 @@ serve(async (req) => {
           body: JSON.stringify(requestBody),
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Booking API error: ${response.status} - ${errorText}`);
-          return new Response(
-            JSON.stringify({ error: 'Booking link not available' }),
-            { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const data = await response.json();
-        console.log(
-          'Booking raw response:',
-          JSON.stringify(data).substring(0, 500),
-        );
-
-        const primary = data || {};
-        const candidate = Array.isArray(primary.data) && primary.data.length > 0
-          ? primary.data[0]
-          : primary;
-
-        const bookingUrl =
-          (typeof primary.paymentUrl === 'string' && primary.paymentUrl) ||
-          (typeof primary.deeplink === 'string' && primary.deeplink) ||
-          (typeof primary.bookingUrl === 'string' && primary.bookingUrl) ||
-          (typeof candidate.paymentUrl === 'string' && candidate.paymentUrl) ||
-          (typeof candidate.deeplink === 'string' && candidate.deeplink) ||
-          (typeof candidate.bookingUrl === 'string' && candidate.bookingUrl) ||
-          null;
-
-        if (!bookingUrl) {
-          console.log('Booking API returned no usable URL', JSON.stringify(data).substring(0, 500));
-          return new Response(
-            JSON.stringify({ error: 'Booking link not available' }),
-            { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-          );
-        }
-
-        console.log('Returning bookingUrl from LiteAPI');
-        return new Response(
-          JSON.stringify({ bookingUrl }),
-          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-        );
-      } catch (error) {
-        console.error('Booking API exception:', error);
-        return new Response(
-          JSON.stringify({ error: 'Booking link not available' }),
-          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-        );
-      }
-    } else if (action === 'prebook') {
-      const offerId = url.searchParams.get('offerId');
-      const checkIn = url.searchParams.get('checkIn');
-      const checkOut = url.searchParams.get('checkOut');
-      const occupancies = url.searchParams.get('occupancies'); // can be JSON string
-      const currency = url.searchParams.get('currency') || 'USD';
-
-      if (!offerId) {
-        return new Response(
-          JSON.stringify({ error: 'offerId is required' }),
-          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const prebookUrl = `https://book.liteapi.travel/v3.0/rates/prebook`;
-
-      const bodyPayload: any = { offerId };
-
-      // Add context if available from frontend
-      if (checkIn) bodyPayload.checkin = checkIn;
-      if (checkOut) bodyPayload.checkout = checkOut;
-      if (currency) bodyPayload.currency = currency;
-
-      // Parse occupancies if sent as string
-      if (occupancies) {
-        try {
-          bodyPayload.occupancies = JSON.parse(occupancies);
-        } catch (e) {
-          console.warn('Invalid occupancies JSON:', occupancies);
-        }
-      }
-
-      try {
-        const response = await fetch(prebookUrl, {
-          method: 'POST',
-          headers: {
-            'X-API-Key': apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(bodyPayload),
-        });
-
         const rawText = await response.text();
         let json: any = {};
         try {
@@ -939,30 +843,173 @@ serve(async (req) => {
         }
 
         if (!response.ok) {
+          console.error(`Booking API error: ${response.status} - ${rawText}`);
           return new Response(
-            JSON.stringify({ error: json?.error?.message || 'Prebook failed' }),
+            JSON.stringify({ error: json?.error?.message || 'Booking failed' }),
             { status: response.status, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
           );
         }
 
+        console.log(
+          'Booking raw response:',
+          JSON.stringify(json).substring(0, 500),
+        );
+
+        const bookingId = json.bookingId || json.data?.bookingId;
+        const confirmationCode = json.confirmationCode || json.data?.confirmationCode;
+        const status = json.status || json.data?.status;
+
+        return new Response(
+          JSON.stringify({ bookingId, confirmationCode, status, raw: json }),
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('Booking API exception:', error);
+        return new Response(
+          JSON.stringify({ error: 'Booking failed due to server error' }),
+          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      }
+    } else if (action === 'prebook') {
+      // ✅ Read from POST body (not query params)
+      let body: any = {};
+      try {
+        body = await req.json();
+      } catch {
+        console.error('❌ PREBOOK: Failed to parse JSON body', error);
+        return new Response(
+          JSON.stringify({ error: 'Invalid JSON body for prebook' }),
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { offerId, usePaymentSdk } = body;
+
+        // ✅ LOG: Received parameters
+  console.log('📥 PREBOOK REQUEST RECEIVED');
+  console.log('  offerId:', offerId);
+  console.log('  usePaymentSdk:', usePaymentSdk);
+  console.log('  Full body:', JSON.stringify(body));
+
+      // ✅ Validate required fields
+      if (!offerId || usePaymentSdk === undefined) {
+            console.error('❌ PREBOOK: Missing required fields', { offerId: !!offerId, usePaymentSdk });
+        return new Response(
+          JSON.stringify({ error: 'offerId and usePaymentSdk are required' }),
+          { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const prebookUrl = `https://book.liteapi.travel/v3.0/rates/prebook`;
+
+      // ✅ Build payload with required fields
+      const bodyPayload = {
+        offerId,
+        usePaymentSdk,
+      };
+
+      try {
+            console.log('🚀 PREBOOK: Sending to LiteAPI');
+    console.log('  URL:', prebookUrl);
+    console.log('  Payload:', JSON.stringify(bodyPayload));
+    console.log('  API Key (first 10 chars):', apiKey.substring(0, 10));
+        console.log('Prebook request body:', JSON.stringify(bodyPayload));
+
+        const response = await fetch(prebookUrl, {
+          method: 'POST',
+          headers: {
+            'X-API-Key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(bodyPayload),
+        });
+
+            console.log('📡 PREBOOK: LiteAPI Response Status:', response.status);
+    console.log('📡 PREBOOK: Response Headers:', JSON.stringify(Object.fromEntries(response.headers.entries())));
+
+
+        const rawText = await response.text();
+            console.log('📡 PREBOOK: Raw Response Text:', rawText.substring(0, 1000)); // First 1000 chars
+        let json: any = {};
+        try {
+          json = JSON.parse(rawText);
+          console.log('✅ PREBOOK: Successfully parsed JSON response');
+        } catch (parseError){
+                console.error('❌ PREBOOK: Failed to parse JSON response', parseError);
+          json = { raw: rawText };
+
+        }
+
+        if (!response.ok) {
+                console.error('❌ PREBOOK API ERROR');
+      console.error('  Status:', response.status);
+      console.error('  Error Message:', json?.error?.message || json?.message);
+      console.error('  Error Details:', JSON.stringify(json?.error || json));
+      console.error('  Full Response:', JSON.stringify(json).substring(0, 500));
+      
+      // Special logging for 400 errors (invalid offerId)
+      if (response.status === 400) {
+        console.error('⚠️  PREBOOK: 400 Bad Request - Possible causes:');
+        console.error('    - Invalid or expired offerId');
+        console.error('    - offerId format incorrect');
+        console.error('    - Missing required fields');
+        console.error('    - API key not sandbox-enabled');
+      }
+          return new Response(
+            JSON.stringify({ 
+              error: json?.error?.message || json?.message || 'Prebook failed',
+              details: json?.error || json,
+              status: response.status
+            }),
+            { status: response.status, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+          );
+        }
+
+            console.log('✅ PREBOOK: Success! Processing response...');
+
+        console.log('Prebook raw response:', JSON.stringify(json).substring(0, 500));
+
+        // ✅ Extract response fields (LiteAPI wraps in 'data' object)
         const prebookId = json.prebookId || json.data?.prebookId;
         const transactionId = json.transactionId || json.data?.transactionId;
         const secretKey = json.secretKey || json.data?.secretKey;
         const pricing = json.pricing || json.data?.pricing;
         const cancellation = json.cancellation || json.data?.cancellation;
 
-        return new Response(
-          JSON.stringify({ prebookId, transactionId, secretKey, pricing, cancellation }),
-          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-        );
-      } catch (error) {
-        console.error('Prebook error:', error);
-        return new Response(
-          JSON.stringify({ error: 'Prebook failed' }),
-          { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-        );
+        console.log('📤 PREBOOK: Extracted Response Data');
+    console.log('  prebookId:', prebookId);
+    console.log('  transactionId:', transactionId);
+    console.log('  secretKey:', secretKey ? 'Present (hidden)' : 'Missing');
+    console.log('  pricing:', pricing ? JSON.stringify(pricing) : 'Not provided');
+    console.log('  cancellation:', cancellation ? JSON.stringify(cancellation) : 'Not provided');
+
+    // Validate critical fields
+    if (!prebookId || !transactionId || !secretKey) {
+      console.error('❌ PREBOOK: Missing critical fields in response');
+      console.error('  prebookId:', prebookId ? 'Present' : 'MISSING');
+      console.error('  transactionId:', transactionId ? 'Present' : 'MISSING');
+      console.error('  secretKey:', secretKey ? 'Present' : 'MISSING');
+    }
+
+    return new Response(
+      JSON.stringify({ prebookId, transactionId, secretKey, pricing, cancellation }),
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('❌ PREBOOK: Exception during fetch');
+    console.error('  Error:', error);
+    console.error('  Error message:', error instanceof Error ? error.message : 'Unknown');
+    console.error('  Error stack:', error instanceof Error ? error.stack : 'N/A');
+    
+    return new Response(
+      JSON.stringify({ 
+        error: 'Prebook failed due to network or server error',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      }),
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+    );
       }
-    } else if (action === 'confirm') {
+  }  else if (action === 'confirm') {
       const prebookId = url.searchParams.get('prebookId');
       const transactionId = url.searchParams.get('transactionId');
       if (!prebookId || !transactionId) {

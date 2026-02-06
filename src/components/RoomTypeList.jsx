@@ -153,7 +153,11 @@ const RoomTypeList = ({ roomTypes, hotelImages, selectedOffer, onSelectOffer, ho
                       {sortedRates.map((rate, rateIndex) => {
                         const price = rate.retailRate?.total?.[0]?.amount || 0;
                         const currency = rate.retailRate?.total?.[0]?.currency || 'USD';
-                        const isSelected = selectedOffer?.offerId === room.offerId;
+                        // Fix: use rate.offerId, not room.offerId
+                        const isSelected = selectedOffer?.offerId === rate.offerId;
+                        // Fix: Check refundableTag correctly based on user spec
+                        const isRefundable = rate.cancellationPolicies?.refundableTag === 'RFN';
+                        
                         return (
                           <div 
                             key={rateIndex}
@@ -162,22 +166,21 @@ const RoomTypeList = ({ roomTypes, hotelImages, selectedOffer, onSelectOffer, ho
                                 ? 'border-primary bg-primary/5 ring-1 ring-primary' 
                                 : 'border-border bg-card hover:border-primary/50'
                             }`}
-      onClick={() => {
-        // ✅ FIXED: Clear toggle logic
-        if (isSelected) {
-          onSelectOffer(null); // Deselect
-        } else {
-          onSelectOffer({
-            offerId: room.offerId,
-            hotelId: hotelId,
-            mappedRoomId: room.mappedRoomId,
-            roomName: room.name,
-            boardName: rate.boardBasis?.description || 'Room Only',
-            refundableTag: rate.cancellationPolicies?.length > 0 ? 'RFN' : 'NRFN',
-            price: { amount: price, currency: currency }
-          });
-        }
-      }}
+                            onClick={() => {
+                              if (isSelected) {
+                                onSelectOffer(null); 
+                              } else {
+                                onSelectOffer({
+                                  offerId: rate.offerId, // Fix: use rate.offerId
+                                  hotelId: hotelId,
+                                  mappedRoomId: room.mappedRoomId,
+                                  roomName: room.name,
+                                  boardName: rate.boardBasis?.description || 'Room Only',
+                                  refundableTag: isRefundable ? 'RFN' : 'NRFN',
+                                  price: { amount: price, currency: currency }
+                                });
+                              }
+                            }}
                           >
                             <div className="flex justify-between items-start mb-2">
                               <div>
@@ -185,9 +188,9 @@ const RoomTypeList = ({ roomTypes, hotelImages, selectedOffer, onSelectOffer, ho
                                   {rate.boardBasis?.description || 'Room Only'}
                                 </div>
                                 <div className={`text-xs mt-1 ${
-                                  rate.cancellationPolicies?.length > 0 ? 'text-green-600' : 'text-orange-600'
+                                  isRefundable ? 'text-green-600' : 'text-orange-600'
                                 }`}>
-                                  {rate.cancellationPolicies?.length > 0 ? 'Free Cancellation' : 'Non-refundable'}
+                                  {isRefundable ? 'Free Cancellation' : 'Non-refundable'}
                                 </div>
                               </div>
                               <div className="text-right">

@@ -28,9 +28,8 @@ export async function handler(event) {
     }
 
 const LITEAPI_KEY =
-  process.env.LITE_API_KEY_PROD ||
-  process.env.VITE_LITEAPI_KEY ||
-  process.env.LITEAPI_KEY_SANDBOX;
+  // process.env.LITE_API_KEY_PROD ||  // change to prod key when ready
+  process.env.LITE_API_KEY;
     
     // Default Fallback: Redirect to the hotel detail page on the site
     // We avoid constructing a direct API URL with the key to prevent exposing secrets
@@ -161,9 +160,8 @@ const LITEAPI_KEY =
     console.error("Redirect Error:", error);
     // Ultimate Fallback
 const LITEAPI_KEY =
-  process.env.LITE_API_KEY_PROD ||
-  process.env.VITE_LITEAPI_KEY ||
-  process.env.LITEAPI_KEY_SANDBOX;
+  // process.env.LITE_API_KEY_PROD ||  // change to prod key when ready
+  process.env.LITE_API_KEY;   // sandbox key
 
       const url = `https://api.liteapi.travel/v3/hotels/${event.path.split("/").pop()}/book?apiKey=${LITEAPI_KEY}`;
     
